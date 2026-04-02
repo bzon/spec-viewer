@@ -25,15 +25,16 @@ archives:
 checksum:
   name_template: checksums.txt
 
-brews:
-  - repository:
-      owner: bzon
-      name: homebrew-tap
-    name: spec-viewer
-    homepage: https://github.com/bzon/spec-viewer
-    description: Local markdown viewer with syntax highlighting, TOC, themes, and search
-    install: |
-      bin.install "spec-viewer"
+# Uncomment after creating bzon/homebrew-tap repo:
+# brews:
+#   - repository:
+#       owner: bzon
+#       name: homebrew-tap
+#     name: spec-viewer
+#     homepage: https://github.com/bzon/spec-viewer
+#     description: Local markdown viewer with syntax highlighting, TOC, themes, and search
+#     install: |
+#       bin.install "spec-viewer"
 
 release:
   github:
