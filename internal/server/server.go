@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"nhooyr.io/websocket"
 )
@@ -52,7 +53,10 @@ func New(root string, assets fs.FS, host string, port int, theme string, targetF
 	mux.HandleFunc("/css/themes/", s.handleThemeCSS)
 	mux.HandleFunc("/", s.handleRoot)
 
-	s.srv = &http.Server{Handler: mux}
+	s.srv = &http.Server{
+		Handler:           mux,
+		ReadHeaderTimeout: 10 * time.Second,
+	}
 	return s, nil
 }
 
@@ -95,7 +99,7 @@ func (s *Server) handleThemeCSS(w http.ResponseWriter, r *http.Request) {
 	// Fall back to ~/.config/spec-viewer/themes/<basename>
 	base := filepath.Base(r.URL.Path)
 	customPath := filepath.Join(os.Getenv("HOME"), ".config", "spec-viewer", "themes", base)
-	if _, statErr := os.Stat(customPath); statErr == nil {
+	if _, statErr := os.Stat(customPath); statErr == nil { // #nosec G703 -- path built from filepath.Base, no traversal possible
 		http.ServeFile(w, r, customPath)
 		return
 	}

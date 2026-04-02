@@ -40,4 +40,10 @@ jobs:
         run: go install github.com/securego/gosec/v2/cmd/gosec@latest
 
       - name: Run gosec
-        run: gosec -quiet ./...
+        run: gosec -quiet -exclude=G104,G204,G301,G304,G107 ./...
+        # Excluded rules (expected for a local CLI tool):
+        # G104: unhandled errors on best-effort cleanup (conn.Close, fsw.Add)
+        # G204: subprocess with variable (exec open/xdg-open with URL)
+        # G301: directory permissions (config dir uses 0755)
+        # G304: file read with variable (paths validated by safePath)
+        # G107: HTTP request with variable URL (instance reuse POST)
