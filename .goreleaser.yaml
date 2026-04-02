@@ -1,0 +1,41 @@
+version: 2
+
+builds:
+  - main: ./cmd/spec-viewer
+    binary: spec-viewer
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - format: tar.gz
+    name_template: "spec-viewer_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        format: zip
+
+checksum:
+  name_template: checksums.txt
+
+brews:
+  - repository:
+      owner: bzon
+      name: homebrew-tap
+    name: spec-viewer
+    homepage: https://github.com/bzon/spec-viewer
+    description: Local markdown viewer with syntax highlighting, TOC, themes, and search
+    install: |
+      bin.install "spec-viewer"
+
+release:
+  github:
+    owner: bzon
+    name: spec-viewer

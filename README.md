@@ -4,6 +4,32 @@ A local markdown viewer built for reading specs, plans, and documentation genera
 
 ## Install
 
+**Homebrew (macOS/Linux):**
+
+```bash
+brew install bzon/tap/spec-viewer
+```
+
+**Download binary:**
+
+Grab the latest release for your platform from [GitHub Releases](https://github.com/bzon/spec-viewer/releases), extract, and move to your PATH:
+
+```bash
+# macOS (Apple Silicon)
+curl -sL https://github.com/bzon/spec-viewer/releases/latest/download/spec-viewer_darwin_arm64.tar.gz | tar xz
+sudo mv spec-viewer /usr/local/bin/
+
+# macOS (Intel)
+curl -sL https://github.com/bzon/spec-viewer/releases/latest/download/spec-viewer_darwin_amd64.tar.gz | tar xz
+sudo mv spec-viewer /usr/local/bin/
+
+# Linux (amd64)
+curl -sL https://github.com/bzon/spec-viewer/releases/latest/download/spec-viewer_linux_amd64.tar.gz | tar xz
+sudo mv spec-viewer /usr/local/bin/
+```
+
+**From source (requires Go):**
+
 ```bash
 go install github.com/bzon/spec-viewer/cmd/spec-viewer@latest
 ```
