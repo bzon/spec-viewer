@@ -13,7 +13,7 @@ const themeMap = {
 };
 
 const md = markdownit({
-  html: true,
+  html: false,
   linkify: true,
   typographer: true,
   highlight: (code, lang) => {

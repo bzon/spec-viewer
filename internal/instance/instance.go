@@ -25,7 +25,7 @@ func WriteLock(path string, info Info) error {
 	if err != nil {
 		return fmt.Errorf("instance: marshal: %w", err)
 	}
-	if err := os.WriteFile(path, data, 0o644); err != nil {
+	if err := os.WriteFile(path, data, 0o600); err != nil {
 		return fmt.Errorf("instance: write: %w", err)
 	}
 	return nil

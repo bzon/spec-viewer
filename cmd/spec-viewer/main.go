@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io/fs"
@@ -111,8 +112,8 @@ func main() {
 	defer instance.Cleanup(lockPath)
 
 	w, err := watcher.New(absTarget, func(changedPath string) {
-		msg := fmt.Sprintf(`{"type":"reload","path":"%s"}`, changedPath)
-		srv.Hub().Broadcast([]byte(msg))
+		msg, _ := json.Marshal(map[string]string{"type": "reload", "path": changedPath})
+		srv.Hub().Broadcast(msg)
 	})
 	if err != nil {
 		log.Printf("warning: could not start file watcher: %v", err)

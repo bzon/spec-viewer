@@ -62,6 +62,12 @@ func (a *API) safePath(rel string) (string, error) {
 // HandleFile serves GET /api/file?path=X.
 func (a *API) HandleFile(w http.ResponseWriter, r *http.Request) {
 	rel := r.URL.Query().Get("path")
+	ext := strings.ToLower(filepath.Ext(rel))
+	if ext != ".md" && ext != ".markdown" {
+		http.Error(w, "only markdown files are supported", http.StatusForbidden)
+		return
+	}
+
 	abs, err := a.safePath(rel)
 	if err != nil {
 		http.Error(w, "forbidden", http.StatusForbidden)

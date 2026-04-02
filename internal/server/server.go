@@ -171,7 +171,7 @@ func (s *Server) serveIndex(w http.ResponseWriter, r *http.Request) {
 // to keep the connection alive.
 func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
-		InsecureSkipVerify: true, // allow any origin for local dev
+		OriginPatterns: []string{"localhost:*", "127.0.0.1:*"},
 	})
 	if err != nil {
 		return
