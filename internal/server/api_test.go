@@ -173,3 +173,46 @@ func TestHandleOpenNonMd(t *testing.T) {
 		t.Fatalf("expected 400, got %d", w.Code)
 	}
 }
+
+func TestHandleFileRejectsNonMarkdown(t *testing.T) {
+	dir := t.TempDir()
+	f := filepath.Join(dir, "config.yaml")
+	os.WriteFile(f, []byte("key: value"), 0644)
+
+	hub := server.NewHub()
+	api := server.NewAPI(dir, hub, "")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/file?path=config.yaml", nil)
+	w := httptest.NewRecorder()
+	api.HandleFile(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for non-markdown file, got %d", w.Code)
+	}
+}
+
+func TestHandleFilesSingleFileMode(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "target.md"), []byte("# Target"), 0644)
+	os.WriteFile(filepath.Join(dir, "other.md"), []byte("# Other"), 0644)
+
+	hub := server.NewHub()
+	api := server.NewAPI(dir, hub, "target.md")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/files", nil)
+	w := httptest.NewRecorder()
+	api.HandleFiles(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	var files []server.FileEntry
+	json.Unmarshal(w.Body.Bytes(), &files)
+	if len(files) != 1 {
+		t.Fatalf("expected 1 file in single-file mode, got %d", len(files))
+	}
+	if files[0].Name != "target.md" {
+		t.Fatalf("expected target.md, got %s", files[0].Name)
+	}
+}
