@@ -8,5 +8,6 @@
   },
   "homepage": "https://github.com/bzon/spec-viewer",
   "repository": "https://github.com/bzon/spec-viewer",
-  "skills": "./.claude/skills"
+  "skills": "./.claude/skills",
+  "hooks": "./.claude/hooks/hooks.json"
 }
