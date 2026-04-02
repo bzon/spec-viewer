@@ -29,6 +29,7 @@ brews:
   - repository:
       owner: bzon
       name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
     name: spec-viewer
     homepage: https://github.com/bzon/spec-viewer
     description: Local markdown viewer with syntax highlighting, TOC, themes, and search
