@@ -250,6 +250,46 @@ body {
   margin-bottom: 0;
 }
 
+.code-block-wrapper {
+  position: relative;
+  margin-bottom: 16px;
+}
+
+.code-block-wrapper pre {
+  margin-bottom: 0;
+}
+
+.copy-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-family: inherit;
+  color: var(--text-muted);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.code-block-wrapper:hover .copy-btn {
+  opacity: 1;
+}
+
+.copy-btn:hover {
+  color: var(--text);
+  border-color: var(--text-muted);
+}
+
+.copy-btn:focus-visible {
+  opacity: 1;
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
 #rendered pre {
   background-color: var(--code-bg);
   border-radius: 6px;

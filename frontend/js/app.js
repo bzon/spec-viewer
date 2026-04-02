@@ -72,6 +72,7 @@ async function loadFile(filePath) {
 
   const markdown = await resp.text();
   els.rendered.innerHTML = render(markdown);
+  addCopyButtons(els.rendered);
   destroyTOC();
   buildTOC(els.toc, els.rendered);
 
@@ -90,6 +91,7 @@ async function reloadCurrentFile() {
   const resp = await fetch('/api/file?path=' + encodeURIComponent(state.currentFile));
   if (!resp.ok) return;
   els.rendered.innerHTML = render(await resp.text());
+  addCopyButtons(els.rendered);
   destroyTOC();
   buildTOC(els.toc, els.rendered);
   els.content.scrollTop = scrollTop;
@@ -307,6 +309,30 @@ function updateSelectedResult(container) {
     } else {
       btn.classList.remove('selected');
     }
+  });
+}
+
+function addCopyButtons(container) {
+  container.querySelectorAll('pre').forEach((pre) => {
+    if (pre.querySelector('.copy-btn')) return;
+    const wrapper = document.createElement('div');
+    wrapper.className = 'code-block-wrapper';
+    pre.parentNode.insertBefore(wrapper, pre);
+    wrapper.appendChild(pre);
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'copy-btn';
+    btn.setAttribute('aria-label', 'Copy code');
+    btn.textContent = 'Copy';
+    btn.addEventListener('click', () => {
+      const code = pre.querySelector('code') || pre;
+      navigator.clipboard.writeText(code.textContent).then(() => {
+        btn.textContent = 'Copied!';
+        setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+      });
+    });
+    wrapper.appendChild(btn);
   });
 }
 
