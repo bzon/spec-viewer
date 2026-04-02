@@ -1,0 +1,14 @@
+:root {
+  --bg: #282a36;
+  --text: #f8f8f2;
+  --text-secondary: #bfbfbf;
+  --text-muted: #6272a4;
+  --border: #44475a;
+  --heading: #f8f8f2;
+  --heading-secondary: #bd93f9;
+  --accent: #bd93f9;
+  --sidebar-bg: #21222c;
+  --hover-bg: rgba(68, 71, 90, 0.5);
+  --active-bg: rgba(189, 147, 249, 0.15);
+  --code-bg: #1e1f29;
+}

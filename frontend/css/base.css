@@ -1,0 +1,607 @@
+/* ============================================================
+   Font Faces
+   ============================================================ */
+
+@font-face {
+  font-family: 'Inter';
+  src: url('/fonts/inter/inter-variable.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('/fonts/jetbrains-mono/jetbrains-mono-variable.woff2') format('woff2');
+  font-weight: 100 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ============================================================
+   Reset & Base
+   ============================================================ */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 16px;
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background-color: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+  min-height: 100vh;
+}
+
+/* ============================================================
+   Layout — Three-panel flexbox
+   ============================================================ */
+
+#app {
+  display: flex;
+  min-height: 100vh;
+  width: 100%;
+}
+
+/* ============================================================
+   Sidebar Left
+   ============================================================ */
+
+.sidebar-left {
+  width: 220px;
+  flex-shrink: 0;
+  background-color: var(--sidebar-bg);
+  border-right: 1px solid var(--border);
+  display: none;
+  flex-direction: column;
+  height: 100vh;
+  position: sticky;
+  top: 0;
+  overflow-y: auto;
+  padding: 16px 0;
+}
+
+.sidebar-left.visible {
+  display: flex;
+}
+
+/* ============================================================
+   Content
+   ============================================================ */
+
+.content {
+  flex: 1;
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 48px 64px;
+  min-width: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  height: 100vh;
+}
+
+/* ============================================================
+   Sidebar Right
+   ============================================================ */
+
+.sidebar-right {
+  width: 220px;
+  flex-shrink: 0;
+  background-color: var(--sidebar-bg);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  position: sticky;
+  top: 0;
+  overflow-y: auto;
+  padding: 16px 0;
+}
+
+/* ============================================================
+   Sidebar Label
+   ============================================================ */
+
+.sidebar-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 0 16px 8px;
+}
+
+/* ============================================================
+   File Items (sidebar-left)
+   ============================================================ */
+
+.file-item {
+  display: block;
+  width: 100%;
+  padding: 6px 16px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border: none;
+  border-radius: 0;
+  background: none;
+  text-align: left;
+  text-decoration: none;
+  font-family: inherit;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background-color 0.1s ease, color 0.1s ease;
+}
+
+.file-group-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding: 12px 16px 4px;
+  text-transform: lowercase;
+  letter-spacing: 0.02em;
+}
+
+.file-item-nested {
+  padding-left: 24px;
+}
+
+.file-item:hover {
+  background-color: var(--hover-bg);
+  color: var(--text);
+}
+
+.file-item.active {
+  background-color: var(--active-bg);
+  color: var(--accent);
+  font-weight: 500;
+}
+
+/* ============================================================
+   Content Typography
+   ============================================================ */
+
+#rendered {
+  color: var(--text);
+}
+
+#rendered h1 {
+  font-size: 2.25rem;
+  font-weight: 700;
+  color: var(--heading);
+  line-height: 1.2;
+  margin-bottom: 32px;
+}
+
+#rendered h2 {
+  font-size: 1.375rem;
+  font-weight: 600;
+  color: var(--heading-secondary);
+  line-height: 1.3;
+  margin-top: 48px;
+  margin-bottom: 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+#rendered h3 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--heading-secondary);
+  line-height: 1.4;
+  margin-top: 32px;
+  margin-bottom: 12px;
+}
+
+#rendered h4 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--heading-secondary);
+  line-height: 1.5;
+  margin-top: 24px;
+  margin-bottom: 8px;
+}
+
+#rendered p {
+  margin-bottom: 16px;
+  color: var(--text);
+}
+
+#rendered a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+#rendered a:hover {
+  text-decoration: underline;
+}
+
+#rendered ul,
+#rendered ol {
+  margin-bottom: 16px;
+  padding-left: 24px;
+}
+
+#rendered li {
+  margin-bottom: 6px;
+  color: var(--text);
+}
+
+#rendered blockquote {
+  border-left: 4px solid var(--accent);
+  margin: 16px 0;
+  padding: 8px 16px;
+  background-color: var(--code-bg);
+  border-radius: 0 4px 4px 0;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+#rendered blockquote p {
+  margin-bottom: 0;
+}
+
+#rendered pre {
+  background-color: var(--code-bg);
+  border-radius: 6px;
+  padding: 16px;
+  overflow-x: auto;
+  margin-bottom: 16px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+#rendered pre code {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: inherit;
+  color: inherit;
+}
+
+#rendered code {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+  background-color: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 2px 5px;
+  font-size: 0.875em;
+  color: var(--text);
+}
+
+#rendered table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 16px;
+  font-size: 14px;
+}
+
+#rendered table th {
+  background-color: var(--code-bg);
+  color: var(--heading-secondary);
+  font-weight: 600;
+  text-align: left;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+}
+
+#rendered table td {
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+#rendered table tr:nth-child(even) td {
+  background-color: var(--hover-bg);
+}
+
+#rendered img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  display: block;
+  margin: 16px 0;
+}
+
+#rendered hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 32px 0;
+}
+
+/* ============================================================
+   TOC (sidebar-right)
+   ============================================================ */
+
+#toc {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 0 16px;
+}
+
+.toc-item {
+  display: block;
+  width: 100%;
+  padding: 5px 16px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-decoration: none;
+  text-align: left;
+  border: none;
+  border-left: 2px solid transparent;
+  background: none;
+  font-family: inherit;
+  transition: color 0.1s ease, border-color 0.1s ease;
+  line-height: 1.4;
+}
+
+.toc-item:hover {
+  color: var(--text);
+  border-left-color: var(--border);
+  cursor: pointer;
+}
+
+.toc-item.active {
+  color: var(--accent);
+  border-left-color: var(--accent);
+  font-weight: 500;
+}
+
+.toc-item.level-3 {
+  padding-left: 28px;
+}
+
+.toc-item.level-4 {
+  padding-left: 40px;
+}
+
+/* ============================================================
+   Theme Switcher
+   ============================================================ */
+
+.theme-switcher {
+  padding: 16px 16px 0;
+  margin-top: 24px;
+  border-top: 1px solid var(--border);
+}
+
+.theme-switcher .sidebar-label {
+  padding: 0 0 8px;
+}
+
+#theme-select {
+  width: 100%;
+  padding: 6px 28px 6px 8px;
+  background-color: var(--code-bg);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%238b949e' d='M3 5l3 3 3-3'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+#theme-select:focus {
+  border-color: var(--accent);
+}
+
+/* ============================================================
+   Scrollbar Styling
+   ============================================================ */
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--border);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--text-muted);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+/* ============================================================
+   Branding
+   ============================================================ */
+
+.app-brand {
+  padding: 0 16px 12px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  opacity: 0.6;
+  margin-top: auto;
+}
+
+/* ============================================================
+   Focus Indicators (Accessibility)
+   ============================================================ */
+
+.file-item:focus-visible,
+.toc-item:focus-visible,
+#theme-select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.file-item {
+  cursor: pointer;
+}
+
+/* ============================================================
+   Loading State
+   ============================================================ */
+
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.loading::after {
+  content: '';
+  width: 16px;
+  height: 16px;
+  margin-left: 8px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ============================================================
+   Search Modal (Cmd+K)
+   ============================================================ */
+
+.search-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 100;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 20vh;
+}
+
+.search-modal {
+  width: 560px;
+  max-width: 90vw;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+}
+
+.search-input {
+  width: 100%;
+  padding: 14px 16px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 15px;
+  outline: none;
+}
+
+.search-input::placeholder {
+  color: var(--text-muted);
+}
+
+.search-results {
+  max-height: 360px;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+.search-result {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-secondary);
+  border: none;
+  background: none;
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
+}
+
+.search-result:hover,
+.search-result.selected {
+  background: var(--hover-bg);
+  color: var(--text);
+}
+
+.search-result:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.search-result-icon {
+  flex-shrink: 0;
+  width: 20px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.search-result-text {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search-result-text mark {
+  background: none;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.search-empty {
+  padding: 24px 16px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.search-hint {
+  padding: 8px 16px;
+  text-align: right;
+  font-size: 11px;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border);
+}
+
+.search-hint kbd {
+  display: inline-block;
+  padding: 1px 5px;
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font-family: inherit;
+  font-size: 10px;
+}

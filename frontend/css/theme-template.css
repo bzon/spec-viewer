@@ -1,0 +1,62 @@
+/* ============================================================
+   spec-viewer Theme Template
+   ============================================================
+   Copy this file to css/themes/<your-theme-name>.css and
+   override the custom properties below.
+
+   All properties must be defined on :root for the theme to
+   function correctly. The defaults shown here match the
+   github-dark theme.
+   ============================================================ */
+
+:root {
+  /* ── Page background ───────────────────────────────────────
+     Main canvas background color.                           */
+  --bg: #0d1117;
+
+  /* ── Primary text ──────────────────────────────────────────
+     Default body text color.                                */
+  --text: #e6edf3;
+
+  /* ── Secondary text ────────────────────────────────────────
+     Slightly dimmed text: file list items, TOC items.       */
+  --text-secondary: #8d96a0;
+
+  /* ── Muted text ────────────────────────────────────────────
+     Least prominent text: sidebar labels, timestamps.       */
+  --text-muted: #6e7681;
+
+  /* ── Border ────────────────────────────────────────────────
+     Dividers, table borders, code block borders.            */
+  --border: #30363d;
+
+  /* ── Heading ───────────────────────────────────────────────
+     H1 and H2 heading color.                                */
+  --heading: #e6edf3;
+
+  /* ── Secondary heading ─────────────────────────────────────
+     H3 and H4 heading color.                                */
+  --heading-secondary: #cdd9e5;
+
+  /* ── Accent ────────────────────────────────────────────────
+     Links, active states, highlight borders.                */
+  --accent: #58a6ff;
+
+  /* ── Sidebar background ────────────────────────────────────
+     Background for both left and right sidebars.            */
+  --sidebar-bg: #161b22;
+
+  /* ── Hover background ──────────────────────────────────────
+     Background on hover for interactive list items,
+     alternating table rows.                                 */
+  --hover-bg: #1f2937;
+
+  /* ── Active background ─────────────────────────────────────
+     Background for the currently selected/active item.      */
+  --active-bg: #1f3a5f;
+
+  /* ── Code background ───────────────────────────────────────
+     Background for inline code, code blocks, blockquotes,
+     and table headers.                                      */
+  --code-bg: #161b22;
+}

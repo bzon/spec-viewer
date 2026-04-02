@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>spec-viewer</title>
+  <link rel="stylesheet" href="/css/base.css">
+  <link id="theme-css" rel="stylesheet" href="/css/themes/github-light.css">
+</head>
+<body>
+  <div id="app">
+    <aside class="sidebar-left" id="file-list">
+      <div class="sidebar-label">Files</div>
+      <div id="files"></div>
+    </aside>
+    <main class="content" id="content">
+      <div id="rendered"></div>
+    </main>
+    <aside class="sidebar-right">
+      <div class="sidebar-label">On this page</div>
+      <nav id="toc"></nav>
+      <div class="theme-switcher">
+        <label class="sidebar-label" for="theme-select">Theme</label>
+        <select id="theme-select" aria-label="Select theme"></select>
+      </div>
+      <div class="app-brand">spec-viewer</div>
+    </aside>
+  </div>
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>

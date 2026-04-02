@@ -1,0 +1,5 @@
+spec-viewer
+*.exe
+.superpowers/
+docs/superpowers/
+.DS_Store
