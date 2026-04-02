@@ -26,17 +26,19 @@ type FileEntry struct {
 
 // API holds the configuration for the HTTP API handlers.
 type API struct {
-	root string
-	hub  *Hub
+	root       string
+	hub        *Hub
+	targetFile string // non-empty in single-file mode (relative path)
 }
 
 // NewAPI creates a new API with the given root directory and hub.
-func NewAPI(root string, hub *Hub) *API {
+// If targetFile is non-empty, HandleFiles returns only that file.
+func NewAPI(root string, hub *Hub, targetFile string) *API {
 	abs, err := filepath.Abs(root)
 	if err != nil {
 		abs = root
 	}
-	return &API{root: abs, hub: hub}
+	return &API{root: abs, hub: hub, targetFile: targetFile}
 }
 
 // safePath resolves the given relative path within root and verifies it does
@@ -85,31 +87,44 @@ func (a *API) HandleFile(w http.ResponseWriter, r *http.Request) {
 func (a *API) HandleFiles(w http.ResponseWriter, r *http.Request) {
 	var entries []FileEntry
 
-	err := filepath.Walk(a.root, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return nil
+	if a.targetFile != "" {
+		// Single-file mode: return only the target file
+		abs := filepath.Join(a.root, a.targetFile)
+		info, err := os.Stat(abs)
+		if err == nil {
+			entries = append(entries, FileEntry{
+				Name:    a.targetFile,
+				Path:    a.targetFile,
+				ModTime: info.ModTime(),
+			})
 		}
-		if info.IsDir() {
+	} else {
+		err := filepath.Walk(a.root, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return nil
+			}
+			if info.IsDir() {
+				return nil
+			}
+			ext := strings.ToLower(filepath.Ext(path))
+			if ext != ".md" && ext != ".markdown" {
+				return nil
+			}
+			rel, relErr := filepath.Rel(a.root, path)
+			if relErr != nil {
+				return nil
+			}
+			entries = append(entries, FileEntry{
+				Name:    rel,
+				Path:    rel,
+				ModTime: info.ModTime(),
+			})
 			return nil
-		}
-		ext := strings.ToLower(filepath.Ext(path))
-		if ext != ".md" && ext != ".markdown" {
-			return nil
-		}
-		rel, relErr := filepath.Rel(a.root, path)
-		if relErr != nil {
-			return nil
-		}
-		entries = append(entries, FileEntry{
-			Name:    rel,
-			Path:    rel,
-			ModTime: info.ModTime(),
 		})
-		return nil
-	})
-	if err != nil {
-		http.Error(w, "internal error", http.StatusInternalServerError)
-		return
+		if err != nil {
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
 	}
 
 	if entries == nil {

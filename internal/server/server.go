@@ -25,9 +25,9 @@ type Server struct {
 
 // New creates a new Server. It binds the listener, creates the Hub and API,
 // and wires up all HTTP routes.
-func New(root string, assets fs.FS, host string, port int, theme string) (*Server, error) {
+func New(root string, assets fs.FS, host string, port int, theme string, targetFile string) (*Server, error) {
 	hub := NewHub()
-	api := NewAPI(root, hub)
+	api := NewAPI(root, hub, targetFile)
 
 	addr := fmt.Sprintf("%s:%d", host, port)
 	ln, err := net.Listen("tcp", addr)
@@ -119,7 +119,31 @@ func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Fallback: serve static files (images, etc.) from root directory.
+	// Only serve known safe file types to avoid leaking source code.
+	if isStaticAsset(rel) {
+		localPath := filepath.Join(s.api.root, filepath.FromSlash(rel))
+		localPath = filepath.Clean(localPath)
+		if strings.HasPrefix(localPath, s.api.root) {
+			if _, err := os.Stat(localPath); err == nil {
+				http.ServeFile(w, r, localPath)
+				return
+			}
+		}
+	}
+
 	http.NotFound(w, r)
+}
+
+// isStaticAsset returns true for file extensions safe to serve from the root directory.
+func isStaticAsset(path string) bool {
+	ext := strings.ToLower(filepath.Ext(path))
+	switch ext {
+	case ".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp", ".ico",
+		".pdf", ".mp4", ".webm":
+		return true
+	}
+	return false
 }
 
 // serveIndex reads index.html from embedded assets, injects the theme CSS

@@ -81,12 +81,14 @@ func main() {
 	}
 
 	rootDir := absTarget
+	targetFile := ""
 	fi, err := os.Stat(absTarget)
 	if err != nil {
 		log.Fatalf("error accessing path: %v", err)
 	}
 	if !fi.IsDir() {
 		rootDir = filepath.Dir(absTarget)
+		targetFile = fi.Name()
 	}
 
 	frontendFS, err := fs.Sub(specviewer.FrontendAssets, "frontend")
@@ -94,7 +96,7 @@ func main() {
 		log.Fatalf("error creating frontend sub-FS: %v", err)
 	}
 
-	srv, err := server.New(rootDir, frontendFS, cfg.Host, cfg.Port, cfg.Theme)
+	srv, err := server.New(rootDir, frontendFS, cfg.Host, cfg.Port, cfg.Theme, targetFile)
 	if err != nil {
 		log.Fatalf("error creating server: %v", err)
 	}

@@ -23,7 +23,7 @@ func TestHandleFileValid(t *testing.T) {
 	}
 
 	hub := server.NewHub()
-	api := server.NewAPI(dir, hub)
+	api := server.NewAPI(dir, hub, "")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/file?path=test.md", nil)
 	w := httptest.NewRecorder()
@@ -40,7 +40,7 @@ func TestHandleFileValid(t *testing.T) {
 func TestHandleFileTraversalBlocked(t *testing.T) {
 	dir := t.TempDir()
 	hub := server.NewHub()
-	api := server.NewAPI(dir, hub)
+	api := server.NewAPI(dir, hub, "")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/file?path=../../etc/passwd", nil)
 	w := httptest.NewRecorder()
@@ -67,7 +67,7 @@ func TestHandleFiles(t *testing.T) {
 	}
 
 	hub := server.NewHub()
-	api := server.NewAPI(dir, hub)
+	api := server.NewAPI(dir, hub, "")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/files", nil)
 	w := httptest.NewRecorder()
@@ -93,7 +93,7 @@ func TestHandleFiles(t *testing.T) {
 func TestHandleThemes(t *testing.T) {
 	dir := t.TempDir()
 	hub := server.NewHub()
-	api := server.NewAPI(dir, hub)
+	api := server.NewAPI(dir, hub, "")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/themes", nil)
 	w := httptest.NewRecorder()
@@ -123,7 +123,7 @@ func TestHandleOpen(t *testing.T) {
 	ch := make(chan []byte, 1)
 	hub.Register(ch)
 
-	api := server.NewAPI(dir, hub)
+	api := server.NewAPI(dir, hub, "")
 
 	body := `{"path":"doc.md"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/open", strings.NewReader(body))
@@ -161,7 +161,7 @@ func TestHandleOpenNonMd(t *testing.T) {
 	}
 
 	hub := server.NewHub()
-	api := server.NewAPI(dir, hub)
+	api := server.NewAPI(dir, hub, "")
 
 	body := `{"path":"doc.txt"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/open", strings.NewReader(body))
