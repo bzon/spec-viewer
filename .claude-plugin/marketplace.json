@@ -1,0 +1,25 @@
+{
+  "name": "spec-viewer",
+  "metadata": {
+    "description": "View markdown specs in the browser with syntax highlighting, TOC navigation, themes, and Cmd+K search."
+  },
+  "owner": {
+    "name": "John Bryan Sazon",
+    "email": "jb.jorge.sazon@gmail.com"
+  },
+  "plugins": [
+    {
+      "name": "spec-viewer",
+      "description": "Local markdown viewer for agent-driven development. Adds /spec-viewer:view command to open specs in the browser with Shiki syntax highlighting, TOC, 5 themes, live reload, and cross-file search.",
+      "version": "0.1.0",
+      "author": {
+        "name": "John Bryan Sazon",
+        "email": "jb.jorge.sazon@gmail.com"
+      },
+      "source": "./",
+      "category": "tools",
+      "homepage": "https://github.com/bzon/spec-viewer",
+      "tags": ["markdown", "viewer", "spec", "documentation", "tools"]
+    }
+  ]
+}

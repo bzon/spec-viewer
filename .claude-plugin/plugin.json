@@ -1,0 +1,12 @@
+{
+  "name": "spec-viewer",
+  "description": "Local markdown viewer for agent-driven development. Adds /spec-viewer:view command to open specs in the browser.",
+  "version": "0.1.0",
+  "author": {
+    "name": "John Bryan Sazon",
+    "email": "bryansazon@gmail.com"
+  },
+  "homepage": "https://github.com/bzon/spec-viewer",
+  "repository": "https://github.com/bzon/spec-viewer",
+  "skills": "./.claude/skills"
+}

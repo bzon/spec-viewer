@@ -69,15 +69,21 @@ spec-viewer --print-theme-template > ~/.config/spec-viewer/themes/my-theme.css
 ### Install as plugin (recommended)
 
 ```bash
-claude plugin add @bzon/spec-viewer
+# Add the marketplace
+claude plugin marketplace add bzon/spec-viewer
+
+# Install the plugin
+claude plugin install spec-viewer
 ```
 
-This installs the `/spec-viewer:view` command and auto-installs the Go binary if Go is available.
+This gives you the `/spec-viewer:view` command:
 
 ```
 /spec-viewer:view docs/specs/my-design.md
 /spec-viewer:view docs/
 ```
+
+**Note:** You still need the `spec-viewer` binary installed (see [Install](#install) above).
 
 ### Install the `/view` command (manual)
 

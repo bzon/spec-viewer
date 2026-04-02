@@ -1,5 +1,0 @@
-{
-  "name": "spec-viewer",
-  "description": "View markdown files in a local browser with syntax highlighting, TOC navigation, themes, and Cmd+K search",
-  "version": "0.1.0"
-}
