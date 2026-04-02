@@ -66,26 +66,25 @@ spec-viewer --print-theme-template > ~/.config/spec-viewer/themes/my-theme.css
 
 ## Use with Claude Code
 
-### Global command
+### Install the `/view` command
 
-Create `~/.claude/commands/view.md`:
+**Option A: Global** (available in all projects)
 
-```markdown
----
-description: Open a markdown file or directory in spec-viewer
-argument: file or directory path to view (required)
----
-
-Run `spec-viewer $ARGUMENTS` using the Bash tool.
-
-- If the command outputs a URL, tell the user: "Viewing at [URL]"
-- If it says "sent to existing instance", tell the user it opened in the existing browser tab
-- If spec-viewer is not installed, tell the user to run: `go install github.com/bzon/spec-viewer/cmd/spec-viewer@latest`
-
-Do NOT use --no-open — let it open the browser automatically.
+```bash
+mkdir -p ~/.claude/commands
+curl -o ~/.claude/commands/view.md \
+  https://raw.githubusercontent.com/bzon/spec-viewer/main/.claude/commands/view.md
 ```
 
-Then use it from any project:
+**Option B: Per-project** (committed to your repo, shared with team)
+
+```bash
+mkdir -p .claude/commands
+curl -o .claude/commands/view.md \
+  https://raw.githubusercontent.com/bzon/spec-viewer/main/.claude/commands/view.md
+```
+
+Then use it:
 
 ```
 /view docs/specs/my-design.md
@@ -94,10 +93,9 @@ Then use it from any project:
 
 ### Agent integration
 
-Agents can run `spec-viewer` directly after writing spec files:
+Agents can also run `spec-viewer` directly after writing spec files:
 
 ```bash
-# In agent output:
 spec-viewer docs/superpowers/specs/2026-04-01-feature-design.md
 # Output: spec-viewer: serving /path at http://localhost:XXXXX
 ```
