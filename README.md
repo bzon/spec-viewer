@@ -66,7 +66,20 @@ spec-viewer --print-theme-template > ~/.config/spec-viewer/themes/my-theme.css
 
 ## Use with Claude Code
 
-### Install the `/view` command
+### Install as plugin (recommended)
+
+```bash
+claude plugin add @bzon/spec-viewer
+```
+
+This installs the `/spec-viewer:view` command and auto-installs the Go binary if Go is available.
+
+```
+/spec-viewer:view docs/specs/my-design.md
+/spec-viewer:view docs/
+```
+
+### Install the `/view` command (manual)
 
 **Option A: Global** (available in all projects)
 

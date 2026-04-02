@@ -1,0 +1,15 @@
+{
+  "name": "@bzon/spec-viewer",
+  "version": "0.1.0",
+  "description": "Claude Code plugin for spec-viewer — view markdown specs in the browser with syntax highlighting, TOC, and search",
+  "keywords": ["claude-code-plugin", "markdown", "viewer", "spec"],
+  "author": "bzon",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bzon/spec-viewer"
+  },
+  "scripts": {
+    "postinstall": "node install-binary.js"
+  }
+}
