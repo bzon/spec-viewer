@@ -1,6 +1,8 @@
 package watcher
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,6 +11,36 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 )
+
+// MaxWatchDirs is the maximum number of directories allowed for recursive watching.
+// Exceeding this likely means the user pointed at a full codebase rather than a docs directory.
+const MaxWatchDirs = 1000
+
+// errDirTooLarge is a sentinel used to stop the walk early.
+var errDirTooLarge = errors.New("directory too large")
+
+// countDirs walks root counting directories. If the count exceeds max, it
+// stops early and returns the count at that point. Real walk errors (e.g.
+// permission denied) are returned as the second value.
+func countDirs(root string, max int) (int, error) {
+	count := 0
+	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			count++
+			if count > max {
+				return errDirTooLarge
+			}
+		}
+		return nil
+	})
+	if err == errDirTooLarge {
+		return count, nil
+	}
+	return count, err
+}
 
 // OnChange is called with the path of the changed markdown file.
 type OnChange func(path string)
@@ -41,6 +73,15 @@ func New(path string, onChange OnChange) (*Watcher, error) {
 
 	isDir := info.IsDir()
 	if isDir {
+		dirCount, countErr := countDirs(path, MaxWatchDirs)
+		if countErr != nil {
+			fsw.Close()
+			return nil, fmt.Errorf("counting directories: %w", countErr)
+		}
+		if dirCount > MaxWatchDirs {
+			fsw.Close()
+			return nil, fmt.Errorf("directory too large for watching (found %d+ directories, max %d) — run \"spec-viewer <file.md>\" to view a specific file", dirCount, MaxWatchDirs)
+		}
 		if err := watchRecursive(fsw, path); err != nil {
 			fsw.Close()
 			return nil, err

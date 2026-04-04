@@ -1,8 +1,10 @@
 package watcher_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -41,6 +43,49 @@ func TestWatchFile(t *testing.T) {
 	case <-time.After(500 * time.Millisecond):
 		t.Fatal("callback not fired within 500ms")
 	}
+}
+
+func TestNewDirectoryTooLarge(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create MaxWatchDirs + 1 subdirectories to exceed the limit.
+	for i := 0; i <= watcher.MaxWatchDirs; i++ {
+		sub := filepath.Join(dir, fmt.Sprintf("sub%d", i))
+		if err := os.MkdirAll(sub, 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	_, err := watcher.New(dir, func(path string) {})
+	if err == nil {
+		t.Fatal("expected error for directory with too many subdirs, got nil")
+	}
+	if !strings.Contains(err.Error(), "directory too large") {
+		t.Fatalf("expected 'directory too large' in error, got: %v", err)
+	}
+}
+
+func TestNewDirectoryUnderLimit(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create a few subdirectories — well under the limit.
+	for i := 0; i < 5; i++ {
+		sub := filepath.Join(dir, fmt.Sprintf("sub%d", i))
+		if err := os.MkdirAll(sub, 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Add a markdown file so the watcher has something to watch.
+	if err := os.WriteFile(filepath.Join(dir, "test.md"), []byte("# test"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	w, err := watcher.New(dir, func(path string) {})
+	if err != nil {
+		t.Fatalf("expected no error for small directory, got: %v", err)
+	}
+	w.Close()
 }
 
 func TestWatchDirectory(t *testing.T) {
