@@ -2,6 +2,7 @@ import markdownit from 'https://esm.sh/markdown-it@14?bundle';
 import { createHighlighter } from 'https://esm.sh/shiki@3?bundle';
 
 let highlighter = null;
+let mermaid = null;
 let currentTheme = 'github-dark';
 
 const themeMap = {
@@ -17,6 +18,9 @@ const md = markdownit({
   linkify: true,
   typographer: true,
   highlight: (code, lang) => {
+    if (lang?.toLowerCase() === 'mermaid') {
+      return `<pre class="mermaid">${md.utils.escapeHtml(code)}</pre>`;
+    }
     if (!highlighter || !lang) return '';
     try {
       return highlighter.codeToHtml(code, {
@@ -100,6 +104,20 @@ export async function initRenderer() {
 
 export function render(markdownText) {
   return md.render(markdownText);
+}
+
+export async function renderDiagrams(container) {
+  const nodes = container.querySelectorAll('pre.mermaid');
+  if (nodes.length === 0) return;
+
+  mermaid ||= (await import('https://esm.sh/mermaid@11?bundle')).default;
+  mermaid.initialize({
+    startOnLoad: false,
+    securityLevel: 'strict',
+    suppressErrorRendering: true,
+    theme: currentTheme === 'github-light' ? 'default' : 'dark',
+  });
+  await mermaid.run({ nodes, suppressErrors: true });
 }
 
 export function setTheme(themeName) {

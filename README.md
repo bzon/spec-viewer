@@ -179,6 +179,7 @@ Flags:
 ## Features
 
 - Markdown rendering with [markdown-it](https://github.com/markdown-it/markdown-it)
+- Mermaid diagram rendering from `mermaid` code blocks
 - Syntax highlighting for 25+ languages with [Shiki](https://shiki.style)
 - "On this page" TOC with active section tracking
 - Live reload on file save
