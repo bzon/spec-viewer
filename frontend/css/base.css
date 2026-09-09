@@ -300,6 +300,17 @@ body {
   line-height: 1.6;
 }
 
+#rendered pre.mermaid {
+  display: flex;
+  justify-content: center;
+  padding: 24px;
+}
+
+#rendered pre.mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+
 #rendered pre code {
   font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
   background: none;

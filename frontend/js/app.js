@@ -1,4 +1,4 @@
-import { initRenderer, render, setTheme } from './render.js';
+import { initRenderer, render, renderDiagrams, setTheme } from './render.js';
 import { buildTOC, destroyTOC } from './toc.js';
 import { connect } from './ws.js';
 import { buildIndex, search } from './search.js';
@@ -72,6 +72,7 @@ async function loadFile(filePath) {
 
   const markdown = await resp.text();
   els.rendered.innerHTML = render(markdown);
+  await renderDiagrams(els.rendered);
   addCopyButtons(els.rendered);
   destroyTOC();
   buildTOC(els.toc, els.rendered);
@@ -91,6 +92,7 @@ async function reloadCurrentFile() {
   const resp = await fetch('/api/file?path=' + encodeURIComponent(state.currentFile));
   if (!resp.ok) return;
   els.rendered.innerHTML = render(await resp.text());
+  await renderDiagrams(els.rendered);
   addCopyButtons(els.rendered);
   destroyTOC();
   buildTOC(els.toc, els.rendered);
@@ -165,7 +167,10 @@ async function loadThemes() {
     els.themeSelect.appendChild(opt);
   });
   const match = els.themeCss.getAttribute('href').match(/themes\/(.+)\.css/);
-  if (match) els.themeSelect.value = match[1];
+  if (match) {
+    els.themeSelect.value = match[1];
+    setTheme(match[1]);
+  }
 }
 
 function applyTheme(themeName) {
@@ -313,7 +318,7 @@ function updateSelectedResult(container) {
 }
 
 function addCopyButtons(container) {
-  container.querySelectorAll('pre').forEach((pre) => {
+  container.querySelectorAll('pre:not(.mermaid)').forEach((pre) => {
     if (pre.querySelector('.copy-btn')) return;
     const wrapper = document.createElement('div');
     wrapper.className = 'code-block-wrapper';
