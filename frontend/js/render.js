@@ -1,5 +1,4 @@
 import markdownit from 'https://esm.sh/markdown-it@14?bundle';
-import { createHighlighter } from 'https://esm.sh/shiki@3?bundle';
 
 let highlighter = null;
 let mermaid = null;
@@ -91,6 +90,7 @@ function colorSwatchPlugin(mdi) {
 md.use(colorSwatchPlugin);
 
 export async function initRenderer() {
+  const { createHighlighter } = await import('https://esm.sh/shiki@3?bundle');
   highlighter = await createHighlighter({
     themes: Object.values(themeMap),
     langs: [
