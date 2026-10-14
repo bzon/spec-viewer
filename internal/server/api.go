@@ -26,19 +26,30 @@ type FileEntry struct {
 
 // API holds the configuration for the HTTP API handlers.
 type API struct {
-	root       string
-	hub        *Hub
-	targetFile string // non-empty in single-file mode (relative path)
+	root        string
+	hub         *Hub
+	targetFile  string // non-empty in single-file mode (relative path)
+	annotations *annotationStore
 }
 
 // NewAPI creates a new API with the given root directory and hub.
 // If targetFile is non-empty, HandleFiles returns only that file.
 func NewAPI(root string, hub *Hub, targetFile string) *API {
+	return NewAPIWithAnnotations(root, hub, targetFile, defaultAnnotationsPath())
+}
+
+// NewAPIWithAnnotations creates an API using a specific annotation file.
+func NewAPIWithAnnotations(root string, hub *Hub, targetFile, annotationsPath string) *API {
 	abs, err := filepath.Abs(root)
 	if err != nil {
 		abs = root
 	}
-	return &API{root: abs, hub: hub, targetFile: targetFile}
+	return &API{
+		root:        abs,
+		hub:         hub,
+		targetFile:  targetFile,
+		annotations: &annotationStore{path: annotationsPath},
+	}
 }
 
 // safePath resolves the given relative path within root and verifies it does

@@ -48,6 +48,7 @@ func New(root string, assets fs.FS, host string, port int, theme string, targetF
 	mux.HandleFunc("/api/file", api.HandleFile)
 	mux.HandleFunc("/api/files", api.HandleFiles)
 	mux.HandleFunc("/api/themes", api.HandleThemes)
+	mux.HandleFunc("/api/annotations", api.HandleAnnotations)
 	mux.HandleFunc("/api/open", api.HandleOpen)
 	mux.HandleFunc("/ws", s.handleWebSocket)
 	mux.HandleFunc("/css/themes/", s.handleThemeCSS)

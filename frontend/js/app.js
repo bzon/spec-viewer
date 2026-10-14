@@ -2,6 +2,7 @@ import { initRenderer, render, renderDiagrams, setTheme } from './render.js';
 import { buildTOC, destroyTOC } from './toc.js';
 import { connect } from './ws.js';
 import { buildIndex, search } from './search.js';
+import { initAnnotations, loadAnnotations } from './annotations.js';
 
 const state = { currentFile: null, isDirectory: false, files: [], themes: [], searchIndex: null, searchOpen: false, selectedResult: 0 };
 
@@ -13,12 +14,17 @@ const els = {
   toc: document.getElementById('toc'),
   themeSelect: document.getElementById('theme-select'),
   themeCss: document.getElementById('theme-css'),
+  highlightToggle: document.getElementById('highlight-toggle'),
+  annotationStatus: document.getElementById('annotation-status'),
 };
 
 async function init() {
-  els.rendered.innerHTML = '<div class="loading">Loading renderer</div>';
-  await initRenderer();
-  els.rendered.innerHTML = '';
+  initAnnotations({
+    root: els.rendered,
+    toggle: els.highlightToggle,
+    status: els.annotationStatus,
+  });
+  const rendererReady = initRenderer();
   await loadThemes();
 
   const hashPath = location.hash.slice(1);
@@ -30,6 +36,7 @@ async function init() {
   if (hashPath) await loadFile(hashPath);
   else if (state.files.length > 0) await loadFile(state.files[0].path);
 
+  rendererReady.then(reloadCurrentFile).catch(console.error);
   await buildSearchIndex();
 
   els.themeSelect.addEventListener('change', (e) => applyTheme(e.target.value));
@@ -71,9 +78,11 @@ async function loadFile(filePath) {
   if (!resp.ok) { els.rendered.textContent = 'Failed to load: ' + resp.statusText; return; }
 
   const markdown = await resp.text();
+  if (state.currentFile !== filePath) return;
   els.rendered.innerHTML = render(markdown);
   await renderDiagrams(els.rendered);
   addCopyButtons(els.rendered);
+  await loadAnnotations(filePath);
   destroyTOC();
   buildTOC(els.toc, els.rendered);
 
@@ -88,12 +97,16 @@ async function loadFile(filePath) {
 
 async function reloadCurrentFile() {
   if (!state.currentFile) return;
+  const filePath = state.currentFile;
   const scrollTop = els.content.scrollTop;
-  const resp = await fetch('/api/file?path=' + encodeURIComponent(state.currentFile));
+  const resp = await fetch('/api/file?path=' + encodeURIComponent(filePath));
   if (!resp.ok) return;
-  els.rendered.innerHTML = render(await resp.text());
+  const markdown = await resp.text();
+  if (state.currentFile !== filePath) return;
+  els.rendered.innerHTML = render(markdown);
   await renderDiagrams(els.rendered);
   addCopyButtons(els.rendered);
+  await loadAnnotations(filePath);
   destroyTOC();
   buildTOC(els.toc, els.rendered);
   els.content.scrollTop = scrollTop;

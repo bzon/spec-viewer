@@ -41,6 +41,12 @@ spec-viewer --theme dracula docs/
 
 Press **Cmd+K** (macOS) or **Ctrl+K** to open the search palette. Searches headings, filenames, and full-text content across all files.
 
+### Highlights and notes
+
+Press **H** or click **Highlight** to turn on the marker, then select text with the mouse. Highlights use a readable color for the active theme and stay enabled until you press **H** or **Escape**. Click highlighted text to add a note or remove the highlight.
+
+Annotations are stored privately in your operating system's user-data directory. Markdown files are never modified.
+
 ### Instance reuse
 
 If spec-viewer is already running, subsequent calls send the file to the existing instance instead of starting a new server.
@@ -150,6 +156,7 @@ Flags:
 - Live reload on file save
 - Tree-grouped file list for directories
 - Cmd+K search across headings, filenames, and content
+- Persistent personal highlights and notes
 - 5 built-in themes + custom theme support
 - Single instance reuse (no duplicate servers)
 - Inter + JetBrains Mono fonts embedded

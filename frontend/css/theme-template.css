@@ -59,4 +59,9 @@
      Background for inline code, code blocks, blockquotes,
      and table headers.                                      */
   --code-bg: #161b22;
+
+  /* ── Highlights ────────────────────────────────────────────
+     Marker background and its readable foreground color.    */
+  --highlight-bg: #7a6100;
+  --highlight-text: #fff5c2;
 }

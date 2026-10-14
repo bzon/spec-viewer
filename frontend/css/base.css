@@ -432,6 +432,140 @@ body {
 }
 
 /* ============================================================
+   Highlights
+   ============================================================ */
+
+.annotation-tools {
+  padding: 16px 16px 0;
+  border-top: 1px solid var(--border);
+}
+
+#highlight-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 6px 8px;
+  color: var(--text-secondary);
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+#highlight-toggle:hover {
+  color: var(--text);
+  border-color: var(--text-muted);
+}
+
+#highlight-toggle.active {
+  color: var(--highlight-text, #1f2328);
+  background: var(--highlight-bg, #ffe066);
+  border-color: transparent;
+}
+
+#highlight-toggle kbd {
+  font: inherit;
+  font-size: 10px;
+  opacity: 0.75;
+}
+
+#annotation-status {
+  min-height: 18px;
+  padding-top: 4px;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+#rendered.highlight-mode {
+  cursor: text;
+}
+
+#rendered .annotation-highlight {
+  padding: 0.06em 0;
+  color: var(--highlight-text, #1f2328);
+  background: var(--highlight-bg, #ffe066);
+  border-radius: 2px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  cursor: pointer;
+}
+
+#rendered .annotation-highlight.has-note {
+  box-shadow: inset 0 -2px var(--accent);
+}
+
+#rendered .annotation-highlight:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.annotation-popover {
+  position: fixed;
+  z-index: 110;
+  padding: 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.25);
+}
+
+.annotation-note {
+  display: block;
+  width: 100%;
+  resize: vertical;
+  padding: 8px;
+  color: var(--text);
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.annotation-note:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.annotation-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.annotation-actions button {
+  padding: 5px 9px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.annotation-remove {
+  color: var(--text-secondary);
+  background: transparent;
+}
+
+.annotation-save {
+  color: var(--bg);
+  background: var(--accent);
+  border-color: var(--accent) !important;
+}
+
+.annotation-actions button:focus-visible,
+#highlight-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ============================================================
    Theme Switcher
    ============================================================ */
 

@@ -11,4 +11,6 @@
   --hover-bg: rgba(177, 186, 196, 0.12);
   --active-bg: rgba(56, 139, 253, 0.15);
   --code-bg: #161b22;
+  --highlight-bg: #7a6100;
+  --highlight-text: #fff5c2;
 }
