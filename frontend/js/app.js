@@ -2,7 +2,9 @@ import { initRenderer, render, renderDiagrams, setTheme } from './render.js';
 import { buildTOC, destroyTOC } from './toc.js';
 import { connect } from './ws.js';
 import { buildIndex, search } from './search.js';
-import { initAnnotations, loadAnnotations } from './annotations.js';
+import { beginDocument, initAnnotations, loadAnnotations, refreshAnnotations } from './annotations.js';
+
+let documentVersion = 0; // bumped on every swap of the rendered document
 
 const state = { currentFile: null, isDirectory: false, files: [], themes: [], searchIndex: null, searchOpen: false, selectedResult: 0 };
 
@@ -16,6 +18,9 @@ const els = {
   themeCss: document.getElementById('theme-css'),
   highlightToggle: document.getElementById('highlight-toggle'),
   annotationStatus: document.getElementById('annotation-status'),
+  commentsList: document.getElementById('comments-list'),
+  commentsEmpty: document.getElementById('comments-empty'),
+  copyPrompt: document.getElementById('copy-prompt'),
 };
 
 async function init() {
@@ -23,6 +28,9 @@ async function init() {
     root: els.rendered,
     toggle: els.highlightToggle,
     status: els.annotationStatus,
+    commentsList: els.commentsList,
+    commentsEmpty: els.commentsEmpty,
+    copyButton: els.copyPrompt,
   });
   const rendererReady = initRenderer();
   await loadThemes();
@@ -42,11 +50,12 @@ async function init() {
   els.themeSelect.addEventListener('change', (e) => applyTheme(e.target.value));
 
   connect((msg) => {
-    if (msg.type === 'reload' && msg.path) {
-      if (msg.path === state.currentFile) reloadCurrentFile();
+    if (msg.type === 'reload') {
+      if (msg.path && msg.path === state.currentFile) reloadCurrentFile();
       refreshFileList();
       buildSearchIndex();
     }
+    if (msg.type === 'annotations' && msg.path === state.currentFile) refreshAnnotations(msg.path);
     if (msg.type === 'navigate' && msg.path) loadFile(msg.path);
   });
 
@@ -73,16 +82,27 @@ async function buildSearchIndex() {
 async function loadFile(filePath) {
   state.currentFile = filePath;
   location.hash = filePath;
+  // Switch the annotation state now, not after the fetch: the old document is
+  // still on screen but must not accept comments, and an open draft is saved
+  // to the old file before currentFile changes.
+  beginDocument(filePath);
 
   const resp = await fetch('/api/file?path=' + encodeURIComponent(filePath));
-  if (!resp.ok) { els.rendered.textContent = 'Failed to load: ' + resp.statusText; return; }
+  if (!resp.ok) {
+    if (state.currentFile !== filePath) return;
+    els.rendered.textContent = 'Failed to load: ' + resp.statusText;
+    return;
+  }
 
   const markdown = await resp.text();
   if (state.currentFile !== filePath) return;
+  const version = ++documentVersion;
   els.rendered.innerHTML = render(markdown);
   await renderDiagrams(els.rendered);
+  if (version !== documentVersion || state.currentFile !== filePath) return;
   addCopyButtons(els.rendered);
   await loadAnnotations(filePath);
+  if (version !== documentVersion || state.currentFile !== filePath) return;
   destroyTOC();
   buildTOC(els.toc, els.rendered);
 
@@ -103,10 +123,14 @@ async function reloadCurrentFile() {
   if (!resp.ok) return;
   const markdown = await resp.text();
   if (state.currentFile !== filePath) return;
+  beginDocument(filePath);
+  const version = ++documentVersion;
   els.rendered.innerHTML = render(markdown);
   await renderDiagrams(els.rendered);
+  if (version !== documentVersion) return;
   addCopyButtons(els.rendered);
   await loadAnnotations(filePath);
+  if (version !== documentVersion) return;
   destroyTOC();
   buildTOC(els.toc, els.rendered);
   els.content.scrollTop = scrollTop;

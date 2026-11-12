@@ -41,9 +41,17 @@ spec-viewer --theme dracula docs/
 
 Press **Cmd+K** (macOS) or **Ctrl+K** to open the search palette. Searches headings, filenames, and full-text content across all files.
 
-### Highlights and notes
+### Highlights and comments
 
-Press **H** or click **Highlight** to turn on the marker, then select text with the mouse. Highlights use a readable color for the active theme and stay enabled until you press **H** or **Escape**. Click highlighted text to add a note or remove the highlight.
+Press **H** or click **Highlight** to turn on the marker, then select text with the mouse. Highlights use a readable color for the active theme and stay enabled until you press **H** or **Escape**.
+
+To leave a review comment, just select text with the highlighter off and click the small **Comment** button that appears (or press **C**). Close the box without typing and nothing is kept; closing it after typing saves what you wrote, and an unsent reply is kept until you send it or leave the document. Selections that span several paragraphs, or sit in a code block, become a block comment on the blocks they touch, marked by a thin bar in the left margin. Code blocks and Mermaid diagrams show a quiet **Comment** button on hover or keyboard focus.
+
+Click a highlight or marker to open its thread: the comment with author and time, replies in order, and a reply box (**Ctrl/Cmd+Enter** sends). You can edit your comment, delete replies, or remove the whole thing. The **Comments** list in the right sidebar shows every annotation with a note or replies; click one to jump to it. If the text changed and the anchor is gone, the comment is listed as detached and stays openable.
+
+**Copy prompt** copies a ready-to-paste prompt for a coding agent: the document path, each comment with its thread, and a `curl` command the agent uses to reply. Replies appear in the open thread live while the viewer is running.
+
+**Clear all** removes every highlight and comment, replies included, from the open document after a confirmation; other documents are not affected.
 
 Annotations are stored privately in your operating system's user-data directory. Markdown files are never modified.
 
@@ -156,7 +164,7 @@ Flags:
 - Live reload on file save
 - Tree-grouped file list for directories
 - Cmd+K search across headings, filenames, and content
-- Persistent personal highlights and notes
+- Persistent personal highlights, review comments with threads, block comments, and a copy-prompt for agents
 - 5 built-in themes + custom theme support
 - Single instance reuse (no duplicate servers)
 - Inter + JetBrains Mono fonts embedded

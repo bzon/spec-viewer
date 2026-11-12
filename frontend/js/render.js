@@ -22,10 +22,12 @@ const md = markdownit({
     }
     if (!highlighter || !lang) return '';
     try {
-      return highlighter.codeToHtml(code, {
-        lang,
-        theme: themeMap[currentTheme] || 'github-dark',
-      });
+      return highlighter
+        .codeToHtml(code, {
+          lang,
+          theme: themeMap[currentTheme] || 'github-dark',
+        })
+        .replace('<pre ', `<pre data-language="${md.utils.escapeHtml(lang)}" `);
     } catch {
       return '';
     }
@@ -109,6 +111,9 @@ export function render(markdownText) {
 export async function renderDiagrams(container) {
   const nodes = container.querySelectorAll('pre.mermaid');
   if (nodes.length === 0) return;
+
+  // Rendering replaces the diagram source with SVG; keep the source for comment anchoring.
+  for (const node of nodes) node.dataset.source = node.textContent;
 
   mermaid ||= (await import('https://esm.sh/mermaid@11?bundle')).default;
   mermaid.initialize({

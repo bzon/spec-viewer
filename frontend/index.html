@@ -25,6 +25,13 @@
           <span>Highlight</span>
           <kbd>H</kbd>
         </button>
+        <section class="comments-panel" aria-labelledby="comments-heading">
+          <h2 id="comments-heading" class="sidebar-label">Comments</h2>
+          <p id="comments-empty" class="comments-empty">No comments yet</p>
+          <ul id="comments-list" class="comments-list" hidden></ul>
+          <button id="copy-prompt" type="button" disabled title="Copy a prompt asking an agent to address these comments">Copy prompt</button>
+        </section>
+        <button id="clear-annotations" type="button" disabled title="Remove every highlight and comment in this document">Clear all</button>
         <div id="annotation-status" role="status" aria-live="polite"></div>
       </div>
       <div class="theme-switcher">
