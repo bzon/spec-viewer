@@ -76,7 +76,11 @@ func (c Config) MergeFlags(f Flags) Config {
 
 // ConfigDir returns the default configuration directory.
 func ConfigDir() string {
-	return filepath.Join("~", ".config", "spec-viewer")
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return filepath.Join(".config", "spec-viewer")
+	}
+	return filepath.Join(home, ".config", "spec-viewer")
 }
 
 // DefaultConfigPath returns the default config file path.
