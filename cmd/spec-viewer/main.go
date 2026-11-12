@@ -112,7 +112,10 @@ func main() {
 	defer instance.Cleanup(lockPath)
 
 	w, err := watcher.New(absTarget, func(changedPath string) {
-		msg, _ := json.Marshal(map[string]string{"type": "reload", "path": changedPath})
+		// An empty path still triggers a reload (file list refresh) without
+		// naming a document the browser could mistake for its current file.
+		rel, _ := server.RelativeDocumentPath(rootDir, changedPath)
+		msg, _ := json.Marshal(map[string]string{"type": "reload", "path": rel})
 		srv.Hub().Broadcast(msg)
 	})
 	if err != nil {
