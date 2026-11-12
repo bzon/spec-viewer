@@ -115,7 +115,7 @@ export async function renderDiagrams(container) {
   // Rendering replaces the diagram source with SVG; keep the source for comment anchoring.
   for (const node of nodes) node.dataset.source = node.textContent;
 
-  mermaid ||= (await import('https://esm.sh/mermaid@11?bundle')).default;
+  mermaid ||= (await import('https://esm.sh/mermaid@12?bundle')).default;
   mermaid.initialize({
     startOnLoad: false,
     securityLevel: 'strict',
