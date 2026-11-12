@@ -1,8 +1,8 @@
-import { initRenderer, render, renderDiagrams, setTheme } from './render.js';
+import { initRenderer, render, layoutDiagrams, renderDiagrams, resetDiagramState, setTheme } from './render.js';
 import { buildTOC, destroyTOC } from './toc.js';
 import { connect } from './ws.js';
 import { buildIndex, search } from './search.js';
-import { beginDocument, initAnnotations, loadAnnotations, refreshAnnotations } from './annotations.js';
+import { beginDocument, initAnnotations, layoutAnnotationMarkers, loadAnnotations, refreshAnnotations } from './annotations.js';
 
 let documentVersion = 0; // bumped on every swap of the rendered document
 
@@ -32,6 +32,34 @@ async function init() {
     commentsEmpty: els.commentsEmpty,
     copyButton: els.copyPrompt,
   });
+  if (typeof ResizeObserver === 'function') {
+    // Window resizes and the file list appearing change the room diagrams can use.
+    new ResizeObserver(() => {
+      layoutDiagrams(els.rendered);
+      layoutAnnotationMarkers();
+    }).observe(els.content);
+  }
+  // Expanding or collapsing a diagram changes its height and left edge.
+  els.rendered.addEventListener('diagramlayout', layoutAnnotationMarkers);
+
+  // Listeners go on before the first await so early interaction is not dropped. Their
+  // handlers tolerate state that has not loaded yet (see applyTheme, hashchange, search).
+  els.themeSelect.addEventListener('change', (e) => applyTheme(e.target.value));
+  window.addEventListener('hashchange', () => {
+    const path = location.hash.slice(1);
+    if (path && path !== state.currentFile) loadFile(path);
+  });
+  initSearch();
+  connect((msg) => {
+    if (msg.type === 'reload') {
+      if (msg.path && msg.path === state.currentFile) reloadCurrentFile();
+      refreshFileList();
+      buildSearchIndex();
+    }
+    if (msg.type === 'annotations' && msg.path === state.currentFile) refreshAnnotations(msg.path);
+    if (msg.type === 'navigate' && msg.path) loadFile(msg.path);
+  });
+
   const rendererReady = initRenderer();
   await loadThemes();
 
@@ -46,25 +74,6 @@ async function init() {
 
   rendererReady.then(reloadCurrentFile).catch(console.error);
   await buildSearchIndex();
-
-  els.themeSelect.addEventListener('change', (e) => applyTheme(e.target.value));
-
-  connect((msg) => {
-    if (msg.type === 'reload') {
-      if (msg.path && msg.path === state.currentFile) reloadCurrentFile();
-      refreshFileList();
-      buildSearchIndex();
-    }
-    if (msg.type === 'annotations' && msg.path === state.currentFile) refreshAnnotations(msg.path);
-    if (msg.type === 'navigate' && msg.path) loadFile(msg.path);
-  });
-
-  window.addEventListener('hashchange', () => {
-    const path = location.hash.slice(1);
-    if (path && path !== state.currentFile) loadFile(path);
-  });
-
-  initSearch();
 }
 
 async function buildSearchIndex() {
@@ -80,6 +89,7 @@ async function buildSearchIndex() {
 }
 
 async function loadFile(filePath) {
+  if (filePath !== state.currentFile) resetDiagramState();
   state.currentFile = filePath;
   location.hash = filePath;
   // Switch the annotation state now, not after the fetch: the old document is
@@ -211,6 +221,7 @@ async function loadThemes() {
 }
 
 function applyTheme(themeName) {
+  if (!state.themes.includes(themeName)) return; // theme list not loaded yet
   els.themeCss.href = '/css/themes/' + themeName + '.css';
   setTheme(themeName);
   if (state.currentFile) reloadCurrentFile();

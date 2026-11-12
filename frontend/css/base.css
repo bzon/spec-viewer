@@ -79,9 +79,7 @@ body {
 
 .content {
   flex: 1;
-  max-width: 900px;
-  margin: 0 auto;
-  padding: 48px 64px;
+  padding: 48px 0;
   min-width: 0;
   overflow-x: hidden;
   overflow-y: auto;
@@ -170,8 +168,11 @@ body {
    Content Typography
    ============================================================ */
 
+/* Text column: 772px, or the scroll area minus 64px each side. Wide diagrams break out of it. */
 #rendered {
   color: var(--text);
+  width: min(772px, calc(100% - 128px));
+  margin: 0 auto;
 }
 
 #rendered h1 {
@@ -275,10 +276,6 @@ body {
   transition: opacity 0.15s ease;
 }
 
-.code-block-wrapper:hover .copy-btn {
-  opacity: 1;
-}
-
 .copy-btn:hover {
   color: var(--text);
   border-color: var(--text-muted);
@@ -308,8 +305,26 @@ body {
 }
 
 #rendered pre.mermaid svg {
+  display: block;
   max-width: 100%;
   height: auto;
+  margin: 0 auto;
+}
+
+/* Collapsed: the scroll wrapper steps aside and the svg is sized as it always was. */
+#rendered pre.mermaid:not(.is-expanded) > .mermaid-scroll {
+  display: contents;
+}
+
+#rendered pre.mermaid > .mermaid-scroll {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+#rendered pre.mermaid > .mermaid-scroll:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
 }
 
 #rendered pre code {
@@ -602,6 +617,7 @@ body {
 .annotation-link:focus-visible,
 .annotation-fab:focus-visible,
 .annotation-block-add:focus-visible,
+.diagram-expand:focus-visible,
 .annotation-block-marker:focus-visible,
 .comment-item:focus-visible,
 #copy-prompt:focus-visible,
@@ -845,7 +861,8 @@ body {
   border-color: var(--accent);
 }
 
-.annotation-block-add {
+.annotation-block-add,
+.diagram-expand {
   position: absolute;
   top: 8px;
   right: 8px;
@@ -861,23 +878,46 @@ body {
   transition: opacity 0.15s ease;
 }
 
-.code-block-wrapper > .annotation-block-add {
+.code-block-wrapper > .annotation-block-add,
+.diagram-expand {
   right: 84px;
 }
 
+/* One rule for every block control (Copy, Comment, Expand): shown while the pointer is
+   over the block or focus is anywhere inside it, so tabbing between them never hides one. */
+.code-block-wrapper:hover > .copy-btn,
 .code-block-wrapper:hover > .annotation-block-add,
+.code-block-wrapper:focus-within > .copy-btn,
+.code-block-wrapper:focus-within > .annotation-block-add,
 #rendered pre.mermaid:hover > .annotation-block-add,
-.annotation-block-add:focus-visible {
+#rendered pre.mermaid:hover > .diagram-expand,
+#rendered pre.mermaid:focus-within > .annotation-block-add,
+#rendered pre.mermaid:focus-within > .diagram-expand,
+.copy-btn:focus-visible,
+.annotation-block-add:focus-visible,
+.diagram-expand:focus-visible {
   opacity: 1;
 }
 
-.annotation-block-add:hover {
+/* No hover (touch): the controls cannot be revealed, so keep them visible but quiet.
+   Same positions as on hover, so they cover no more of the block. */
+@media (hover: none) {
+  .copy-btn,
+  .annotation-block-add,
+  .diagram-expand {
+    opacity: 0.7;
+  }
+}
+
+.annotation-block-add:hover,
+.diagram-expand:hover {
   color: var(--text);
   border-color: var(--text-muted);
 }
 
 .annotation-block-marker {
   position: absolute;
+  z-index: 1;
   user-select: none;
   width: 6px;
   padding: 0;
@@ -894,7 +934,8 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .annotation-block-add {
+  .annotation-block-add,
+  .diagram-expand {
     transition: none;
   }
 }

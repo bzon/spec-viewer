@@ -158,7 +158,7 @@ Flags:
 ## Features
 
 - Markdown rendering with [markdown-it](https://github.com/markdown-it/markdown-it)
-- Mermaid diagram rendering from `mermaid` code blocks
+- Mermaid diagram rendering from `mermaid` code blocks; diagrams that are scaled down to fit can be shown at full size with the **Expand** button that appears on hover
 - Syntax highlighting for 25+ languages with [Shiki](https://shiki.style)
 - "On this page" TOC with active section tracking
 - Live reload on file save

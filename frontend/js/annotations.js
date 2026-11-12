@@ -5,10 +5,14 @@ const CONTEXT_LENGTH = 64;
 const BLOCK_QUOTE_LIMIT = 500;
 const MAX_BLOCK_COUNT = 50;
 const MAX_LANES = 4;
+const LANE_STEP = 10;
+const MARKER_CLEARANCE = 12;
 const TEXT_QUOTE_LIMIT = 3000;
 const DIAGRAM_OR_CODE = 'pre.mermaid, .code-block-wrapper';
 // Rendered output and UI that is not document text: never part of any quote or context.
-const NON_TEXT = 'svg, style, .copy-btn, .annotation-block-add, .annotation-block-marker';
+// Hover controls inside code blocks and diagrams; never part of a block's text.
+const BLOCK_CONTROLS = '.copy-btn, .annotation-block-add, .diagram-expand';
+const NON_TEXT = `svg, style, ${BLOCK_CONTROLS}, .annotation-block-marker`;
 
 let root;
 let toggle;
@@ -459,7 +463,7 @@ function isBlockMarker(element) {
 }
 
 // Text of a node as the author wrote it: a rendered diagram counts as its source,
-// and SVG output, styles, the copy/comment buttons and block markers count as nothing.
+// and SVG output, styles, the copy/comment/expand buttons and block markers count as nothing.
 // Unlike textContent this does not change when Mermaid renders or a button label changes.
 function stableText(node) {
   if (node.nodeType === Node.TEXT_NODE) return node.data;
@@ -628,19 +632,31 @@ function scheduleLayout() {
   });
 }
 
+export function layoutAnnotationMarkers() {
+  layoutMarkers();
+}
+
 function layoutMarkers() {
   // Measured against #rendered (the markers' containing block), not offsetTop,
   // because nested blocks have other offset parents.
   const rootRect = root.getBoundingClientRect();
   const origin = rootRect.top + root.clientTop;
+  const originLeft = rootRect.left + root.clientLeft;
   const rows = blockMarkers
     .filter((item) => item.first.isConnected && item.last.isConnected)
     .map((item) => ({
       item,
       top: item.first.getBoundingClientRect().top - origin,
       bottom: item.last.getBoundingClientRect().bottom - origin,
+      // Diagrams can break out of the column; keep the marker left of the widest one.
+      edge: Math.min(0, ...(anchors.get(item.id)?.nodes ?? [item.first]).map((node) => node.getBoundingClientRect().left - originLeft)),
     }))
     .sort((a, b) => a.top - b.top);
+  // Never closer than MARKER_CLEARANCE to the scroll area's left edge (it clips overflow,
+  // and the focus ring needs room). Lanes that would cross it overlay the block's own
+  // left padding instead of being clipped.
+  const scrollArea = root.closest('.content');
+  const minLeft = scrollArea ? scrollArea.getBoundingClientRect().left + scrollArea.clientLeft - originLeft + MARKER_CLEARANCE : -Infinity;
   const laneBottoms = [];
   for (const row of rows) {
     let lane = laneBottoms.findIndex((bottom) => bottom <= row.top);
@@ -648,7 +664,12 @@ function layoutMarkers() {
     laneBottoms[lane] = row.bottom;
     row.item.el.style.top = `${row.top}px`;
     row.item.el.style.height = `${Math.max(row.bottom - row.top, 8)}px`;
-    row.item.el.style.left = `${-18 - Math.min(lane, MAX_LANES) * 10}px`;
+    const lanesOutside = Math.max(1, Math.floor((row.edge - 18 - minLeft) / LANE_STEP) + 1);
+    const overlaysPadding = row.item.first.matches?.('pre.mermaid') && lane >= lanesOutside;
+    const left = !overlaysPadding
+      ? row.edge - 18 - Math.min(lane, MAX_LANES) * LANE_STEP
+      : row.edge + 4 + Math.min(lane - lanesOutside, MAX_LANES) * LANE_STEP;
+    row.item.el.style.left = `${left}px`;
   }
   if (popover) placePopover();
 }
@@ -1218,7 +1239,7 @@ function placePopover() {
   const margin = 12;
   // Stay inside the document column (and the viewport), not over the sidebars.
   const column = root.closest('.content')?.getBoundingClientRect();
-  const minLeft = Math.max(margin, root.getBoundingClientRect().left);
+  const minLeft = column ? column.left + margin : margin;
   const maxRight = Math.min(window.innerWidth - margin, column ? column.right - margin : window.innerWidth);
   const width = Math.min(360, Math.max(200, maxRight - minLeft), window.innerWidth - margin * 2);
   popover.style.width = `${width}px`;
