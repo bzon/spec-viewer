@@ -51,13 +51,15 @@ Click a highlight or marker to open its thread: the comment with author and time
 
 **Copy prompt** copies a ready-to-paste prompt for a coding agent: the document path, each comment with its thread, and a `curl` command the agent uses to reply. Replies appear in the open thread live while the viewer is running.
 
+**Copy feedback** copies a short message for pasting into the agent's terminal as your reply: only comments not yet sent (or all of them again if none is new), each with the text it refers to, your comment and follow-ups, and a closing `curl` command the agent runs to mark them read. Copying marks those comments as sent, and the agent's acknowledgement shows as read in the Comments list and the thread; editing a comment or replying makes it unsent again. Unlike **Copy prompt**, it is not self-contained: use Copy prompt for an agent that has not seen the document.
+
 **Clear all** removes every highlight and comment, replies included, from the open document after a confirmation; other documents are not affected.
 
 Annotations are stored privately in your operating system's user-data directory. Markdown files are never modified.
 
 ### Instance reuse
 
-If spec-viewer is already running, subsequent calls send the file to the existing instance instead of starting a new server.
+If spec-viewer is already running, a later call for any file or folder sends it to the existing instance instead of starting a new server, and opens a browser tab only if none is connected for that folder. The path opens as another folder in the same process, each under its own `/w/<id>/` URL with its own files, comments and live reload. When more than one folder is open, a small Folder selector (top of the file list, or of the right sidebar for a single file) switches between them. This hand-off only works for viewers bound to localhost; a viewer started with a network `--host` does not accept folders from later invocations.
 
 ## Use with AI Agents
 
@@ -75,6 +77,24 @@ Open docs/specs/my-design.md in spec-viewer
 
 The skill runs `spec-viewer` through the shell. The viewer opens automatically; later calls reuse the existing browser tab.
 
+### pi extension
+
+This repository is also a [pi](https://pi.dev) package that adds a `/spec-view` command (and the `spec-viewer` skill). Install the binary first, then:
+
+```bash
+pi install git:github.com/bzon/spec-viewer
+# or from a local checkout
+pi install /path/to/spec-viewer
+```
+
+```
+/spec-view [path]   open a file or directory (default: the session's working directory)
+/spec-view status   list viewers started by this pi session
+/spec-view stop     stop viewers started by this pi session
+```
+
+`path` is resolved against the session's working directory and may start with `@` or `~`; it must be a directory or a `.md`/`.markdown` file. The binary is found on `PATH`; set `SPEC_VIEWER_BIN` to use another one. `stop` only affects viewers this session started. When pi exits, started viewers keep running so the browser tab stays usable. Output is logged to a file in the OS temp directory.
+
 ### Building your own integration
 
 Agents can also call `spec-viewer` directly:
@@ -89,11 +109,12 @@ spec-viewer /path/to/another-spec.md
 # Output: spec-viewer: sent /path/to/another-spec.md to existing instance on port XXXXX
 ```
 
-Or use the HTTP API on a running instance:
+Or use the HTTP API on a running instance. It requires the token stored in the lock file (`~/.config/spec-viewer/instance.json`):
 
 ```bash
 curl -X POST http://localhost:PORT/api/open \
   -H 'Content-Type: application/json' \
+  -H "X-Spec-Viewer-Token: $(jq -r .token ~/.config/spec-viewer/instance.json)" \
   -d '{"path": "/absolute/path/to/spec.md"}'
 ```
 

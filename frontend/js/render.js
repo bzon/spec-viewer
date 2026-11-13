@@ -1,4 +1,5 @@
 import markdownit from 'https://esm.sh/markdown-it@14?bundle';
+import { encodeHashPath, resolveDocumentTarget, workspaceBase } from './workspace.js';
 
 let highlighter = null;
 let mermaid = null;
@@ -132,8 +133,47 @@ const EDGE_LABEL_THEME_CSS = `
   .labelBkg { box-shadow: -3px 0 0 var(--edge-label-bg, var(--code-bg)), 3px 0 0 var(--edge-label-bg, var(--code-bg)); }
 `;
 
-export function render(markdownText) {
-  return md.render(markdownText);
+// Relative image and link targets are relative to the document, as in any markdown
+// viewer; a leading "/" means the workspace root. markdown-it has already refused
+// javascript:, vbscript:, file: and non-image data: URLs, and resolveDocumentTarget
+// leaves every URL with a scheme untouched, so only plain paths are rewritten.
+function rewriteTargetsPlugin(mdi) {
+  const encodePath = (path) => path.split('/').map(encodeURIComponent).join('/');
+
+  const defaultImage = mdi.renderer.rules.image ||
+    ((tokens, idx, options, _env, self) => self.renderToken(tokens, idx, options));
+  mdi.renderer.rules.image = (tokens, idx, options, env, self) => {
+    const token = tokens[idx];
+    const resolved = resolveDocumentTarget(token.attrGet('src'), env.docPath || '');
+    if (resolved) token.attrSet('src', workspaceBase + encodePath(resolved.path) + resolved.suffix);
+    return defaultImage(tokens, idx, options, env, self);
+  };
+
+  const defaultLinkOpen = mdi.renderer.rules.link_open ||
+    ((tokens, idx, options, _env, self) => self.renderToken(tokens, idx, options));
+  mdi.renderer.rules.link_open = (tokens, idx, options, env, self) => {
+    const token = tokens[idx];
+    const href = token.attrGet('href') || '';
+    if (href.startsWith('#')) {
+      token.attrSet('data-anchor', href.slice(1)); // scrolls within the document; see app.js
+    } else {
+      const resolved = resolveDocumentTarget(href, env.docPath || '');
+      if (resolved && /\.(md|markdown)$/i.test(resolved.path)) {
+        token.attrSet('href', '#' + encodeHashPath(resolved.path)); // opens in the viewer
+        const section = resolved.suffix.match(/#(.+)$/);
+        if (section) token.attrSet('data-section', section[1]); // scrolled to after load; see app.js
+      } else if (resolved) {
+        token.attrSet('href', workspaceBase + encodePath(resolved.path) + resolved.suffix);
+      }
+    }
+    return defaultLinkOpen(tokens, idx, options, env, self);
+  };
+}
+
+md.use(rewriteTargetsPlugin);
+
+export function render(markdownText, docPath = '') {
+  return md.render(markdownText, { docPath });
 }
 
 // Diagrams the reader expanded, keyed by diagram source plus occurrence among identical

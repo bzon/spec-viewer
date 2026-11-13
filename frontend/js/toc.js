@@ -2,13 +2,13 @@ let observer = null;
 let activeId = null;
 
 export function buildTOC(container, contentEl) {
+  assignHeadingIds(contentEl);
   const headings = contentEl.querySelectorAll('h2, h3');
   container.textContent = '';
   const items = [];
 
   headings.forEach((heading) => {
-    const id = heading.id || slugify(heading.textContent);
-    heading.id = id;
+    const id = heading.id;
 
     const item = document.createElement('button');
     item.type = 'button';
@@ -55,6 +55,19 @@ function setActive(id, items) {
   items.forEach(({ el, id: itemId }) => {
     if (itemId === id) el.classList.add('active');
     else el.classList.remove('active');
+  });
+}
+
+// Every heading gets an id (GitHub style, repeats get -1, -2, ...) so "#section" links
+// and links to a section of another document can find it.
+export function assignHeadingIds(contentEl) {
+  const used = new Set();
+  contentEl.querySelectorAll('h1, h2, h3, h4, h5, h6').forEach((heading) => {
+    const base = heading.id || slugify(heading.textContent) || 'section';
+    let id = base;
+    for (let n = 1; used.has(id); n++) id = `${base}-${n}`;
+    used.add(id);
+    heading.id = id;
   });
 }
 

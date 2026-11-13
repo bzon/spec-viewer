@@ -1,12 +1,13 @@
 import { initRenderer, render, layoutDiagrams, renderDiagrams, resetDiagramState, setTheme } from './render.js';
 import { buildTOC, destroyTOC } from './toc.js';
-import { connect } from './ws.js';
+import { connect, disconnect } from './ws.js';
 import { buildIndex, search } from './search.js';
-import { beginDocument, initAnnotations, layoutAnnotationMarkers, loadAnnotations, refreshAnnotations } from './annotations.js';
+import { apiUrl, isFolderGone, isUnknownWorkspace, readHashPath, workspaceId, writeHashPath } from './workspace.js';
+import { beginDocument, initAnnotations, layoutAnnotationMarkers, loadAnnotations, refreshAnnotations, suspendAnnotations } from './annotations.js';
 
 let documentVersion = 0; // bumped on every swap of the rendered document
 
-const state = { currentFile: null, isDirectory: false, files: [], themes: [], searchIndex: null, searchOpen: false, selectedResult: 0 };
+const state = { workspaceGone: false, pendingSection: null, workspaces: [], currentH1: '', currentFile: null, isDirectory: false, files: [], themes: [], searchIndex: null, searchOpen: false, selectedResult: 0 };
 
 const els = {
   fileList: document.getElementById('file-list'),
@@ -21,6 +22,7 @@ const els = {
   commentsList: document.getElementById('comments-list'),
   commentsEmpty: document.getElementById('comments-empty'),
   copyPrompt: document.getElementById('copy-prompt'),
+  copyFeedback: document.getElementById('copy-feedback'),
 };
 
 async function init() {
@@ -31,6 +33,7 @@ async function init() {
     commentsList: els.commentsList,
     commentsEmpty: els.commentsEmpty,
     copyButton: els.copyPrompt,
+    feedbackButton: els.copyFeedback,
   });
   if (typeof ResizeObserver === 'function') {
     // Window resizes and the file list appearing change the room diagrams can use.
@@ -46,9 +49,11 @@ async function init() {
   // handlers tolerate state that has not loaded yet (see applyTheme, hashchange, search).
   els.themeSelect.addEventListener('change', (e) => applyTheme(e.target.value));
   window.addEventListener('hashchange', () => {
-    const path = location.hash.slice(1);
+    const path = readHashPath();
     if (path && path !== state.currentFile) loadFile(path);
   });
+  els.rendered.addEventListener('click', scrollToAnchor);
+  window.addEventListener('focus', loadWorkspaces);
   initSearch();
   connect((msg) => {
     if (msg.type === 'reload') {
@@ -58,13 +63,15 @@ async function init() {
     }
     if (msg.type === 'annotations' && msg.path === state.currentFile) refreshAnnotations(msg.path);
     if (msg.type === 'navigate' && msg.path) loadFile(msg.path);
-  });
+  }, probeWorkspace);
 
   const rendererReady = initRenderer();
   await loadThemes();
+  const workspacesReady = loadWorkspaces();
 
-  const hashPath = location.hash.slice(1);
-  const filesResp = await fetch('/api/files');
+  const hashPath = readHashPath();
+  const filesResp = await fetch(apiUrl('/api/files'));
+  if (await handleUnknownWorkspace(filesResp)) return;
   state.files = await filesResp.json();
   state.isDirectory = state.files.length > 1;
 
@@ -72,14 +79,158 @@ async function init() {
   if (hashPath) await loadFile(hashPath);
   else if (state.files.length > 0) await loadFile(state.files[0].path);
 
+  await workspacesReady;
+  placeWorkspaceSwitcher();
   rendererReady.then(reloadCurrentFile).catch(console.error);
   await buildSearchIndex();
+}
+
+// A refused WebSocket reports no reason, so ask a cheap scoped endpoint whether the
+// workspace is gone. Network errors and other statuses mean "keep backing off".
+async function probeWorkspace() {
+  if (state.workspaceGone) return;
+  try {
+    await handleUnknownWorkspace(await fetch(apiUrl('/api/files')));
+  } catch { /* server unreachable; ws.js retries */ }
+}
+
+// The folder is gone from the viewer, or from the disk: say so once, and stop talking
+// to the server about it.
+async function handleUnknownWorkspace(response) {
+  let message;
+  if (await isUnknownWorkspace(response)) message = 'This folder is no longer open in the viewer. Run spec-viewer on it again.';
+  else if (await isFolderGone(response)) message = 'This folder no longer exists on disk.';
+  else return false;
+  if (!state.workspaceGone) {
+    state.workspaceGone = true;
+    disconnect();
+    destroyTOC();
+    els.rendered.textContent = '';
+    const paragraph = document.createElement('p');
+    paragraph.className = 'workspace-gone';
+    paragraph.textContent = message;
+    els.rendered.appendChild(paragraph);
+    els.toc?.replaceChildren();
+    document.querySelectorAll('.file-item').forEach((el) => el.classList.remove('active'));
+    state.currentH1 = '';
+    document.title = 'spec-viewer';
+    suspendAnnotations();
+    updateLiveReloadHint();
+  }
+  return true;
+}
+
+function updateTitle() {
+  if (state.workspaceGone) return;
+  const name = currentWorkspace()?.name;
+  if (state.currentH1) document.title = name ? `${state.currentH1} \u2014 ${name}` : state.currentH1 + ' \u2014 spec-viewer';
+  else document.title = name ? `${name} \u2014 spec-viewer` : 'spec-viewer';
+}
+
+function currentWorkspace() {
+  return state.workspaces.find((workspace) => workspace.id === workspaceId);
+}
+
+async function loadWorkspaces() {
+  try {
+    const resp = await fetch('/api/workspaces');
+    if (!resp.ok) return;
+    state.workspaces = await resp.json();
+  } catch {
+    return;
+  }
+  updateTitle();
+  updateLiveReloadHint();
+  renderWorkspaceSwitcher();
+}
+
+// Quiet note in the right sidebar when the server could not watch this folder.
+function updateLiveReloadHint() {
+  const hint = document.getElementById('live-reload-hint');
+  if (hint) hint.hidden = state.workspaceGone || currentWorkspace()?.watching !== false;
+}
+
+// One labelled select, shown only while more than one folder is open.
+let switcher = null;
+
+function renderWorkspaceSwitcher() {
+  if (state.workspaces.length < 2) {
+    switcher?.remove();
+    switcher = null;
+    return;
+  }
+  if (!switcher) {
+    switcher = document.createElement('div');
+    switcher.className = 'workspace-switcher';
+    const label = document.createElement('label');
+    label.className = 'sidebar-label';
+    label.htmlFor = 'workspace-select';
+    label.textContent = 'Folder';
+    const select = document.createElement('select');
+    select.id = 'workspace-select';
+    select.addEventListener('change', () => { location.assign(select.value); });
+    switcher.append(label, select);
+    placeWorkspaceSwitcher();
+  }
+  const select = switcher.querySelector('select');
+  select.textContent = '';
+  state.workspaces.forEach((workspace) => {
+    const opt = document.createElement('option');
+    opt.value = workspace.url;
+    opt.textContent = workspace.name;
+    opt.title = workspace.root;
+    opt.selected = workspace.id === workspaceId;
+    select.appendChild(opt);
+  });
+  select.title = currentWorkspace()?.root || '';
+}
+
+// Top of the file list; the right sidebar when the file list is hidden (single file).
+function placeWorkspaceSwitcher() {
+  if (!switcher) return;
+  if (state.isDirectory) {
+    els.fileList.prepend(switcher);
+  } else {
+    const right = document.querySelector('.sidebar-right');
+    right.prepend(switcher);
+  }
+}
+
+// In-document "#heading" links scroll instead of changing the fragment, which names the file.
+function scrollToAnchor(event) {
+  const sectionLink = event.target.closest?.('a[data-section]');
+  if (sectionLink && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && event.button === 0) {
+    // Link to a section of another document: the address bar keeps only the file path.
+    event.preventDefault();
+    const path = decodeHash(sectionLink.getAttribute('href').slice(1));
+    if (path === state.currentFile) {
+      scrollToHeading(sectionLink.dataset.section);
+    } else {
+      state.pendingSection = { path, id: sectionLink.dataset.section };
+      loadFile(path);
+    }
+    return;
+  }
+  const link = event.target.closest?.('a[data-anchor]');
+  if (!link) return;
+  event.preventDefault();
+  scrollToHeading(link.dataset.anchor);
+}
+
+function decodeHash(value) {
+  try { return decodeURIComponent(value); } catch { return value; }
+}
+
+function scrollToHeading(id) {
+  document.getElementById(decodeHash(id))?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 async function buildSearchIndex() {
   const entries = [];
   for (const file of state.files) {
-    const resp = await fetch('/api/file?path=' + encodeURIComponent(file.path));
+    if (state.workspaceGone) return;
+    const resp = await fetch(apiUrl('/api/file', { path: file.path }));
+    if (await handleUnknownWorkspace(resp)) return;
     if (resp.ok) {
       const content = await resp.text();
       entries.push({ path: file.path, name: file.name, content });
@@ -89,25 +240,29 @@ async function buildSearchIndex() {
 }
 
 async function loadFile(filePath) {
+  if (state.workspaceGone) return;
+  if (state.pendingSection && state.pendingSection.path !== filePath) state.pendingSection = null;
   if (filePath !== state.currentFile) resetDiagramState();
   state.currentFile = filePath;
-  location.hash = filePath;
+  writeHashPath(filePath);
   // Switch the annotation state now, not after the fetch: the old document is
   // still on screen but must not accept comments, and an open draft is saved
   // to the old file before currentFile changes.
   beginDocument(filePath);
 
-  const resp = await fetch('/api/file?path=' + encodeURIComponent(filePath));
+  const resp = await fetch(apiUrl('/api/file', { path: filePath }));
+  if (await handleUnknownWorkspace(resp)) return;
   if (!resp.ok) {
     if (state.currentFile !== filePath) return;
-    els.rendered.textContent = 'Failed to load: ' + resp.statusText;
+    state.pendingSection = null;
+    els.rendered.textContent = 'Failed to load: ' + (resp.statusText || resp.status);
     return;
   }
 
   const markdown = await resp.text();
   if (state.currentFile !== filePath) return;
   const version = ++documentVersion;
-  els.rendered.innerHTML = render(markdown);
+  els.rendered.innerHTML = render(markdown, filePath);
   await renderDiagrams(els.rendered);
   if (version !== documentVersion || state.currentFile !== filePath) return;
   addCopyButtons(els.rendered);
@@ -122,20 +277,26 @@ async function loadFile(filePath) {
   });
 
   const h1 = els.rendered.querySelector('h1');
-  document.title = h1 ? h1.textContent + ' \u2014 spec-viewer' : 'spec-viewer';
+  state.currentH1 = h1 ? h1.textContent : '';
+  updateTitle();
+
+  const pending = state.pendingSection;
+  state.pendingSection = null;
+  if (pending && pending.path === filePath) scrollToHeading(pending.id);
 }
 
 async function reloadCurrentFile() {
   if (!state.currentFile) return;
   const filePath = state.currentFile;
   const scrollTop = els.content.scrollTop;
-  const resp = await fetch('/api/file?path=' + encodeURIComponent(filePath));
+  const resp = await fetch(apiUrl('/api/file', { path: filePath }));
+  if (await handleUnknownWorkspace(resp)) return;
   if (!resp.ok) return;
   const markdown = await resp.text();
   if (state.currentFile !== filePath) return;
   beginDocument(filePath);
   const version = ++documentVersion;
-  els.rendered.innerHTML = render(markdown);
+  els.rendered.innerHTML = render(markdown, filePath);
   await renderDiagrams(els.rendered);
   if (version !== documentVersion) return;
   addCopyButtons(els.rendered);
@@ -189,7 +350,10 @@ function renderFileList() {
 }
 
 async function refreshFileList() {
-  const resp = await fetch('/api/files');
+  if (state.workspaceGone) return;
+  const resp = await fetch(apiUrl('/api/files'));
+  if (await handleUnknownWorkspace(resp)) return;
+  if (!resp.ok) return;
   state.files = await resp.json();
   if (state.isDirectory) {
     renderFileList();

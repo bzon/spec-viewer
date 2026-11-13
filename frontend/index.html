@@ -29,11 +29,13 @@
           <h2 id="comments-heading" class="sidebar-label">Comments</h2>
           <p id="comments-empty" class="comments-empty">No comments yet</p>
           <ul id="comments-list" class="comments-list" hidden></ul>
-          <button id="copy-prompt" type="button" disabled title="Copy a prompt asking an agent to address these comments">Copy prompt</button>
+          <button id="copy-feedback" type="button" disabled title="Copy a short reply with your new comments to paste into the agent's terminal; marks them as sent">Copy feedback</button>
+          <button id="copy-prompt" type="button" disabled title="Copy a longer, self-contained prompt (file path, comment ids, how to reply) for an agent that has not seen this document">Copy prompt</button>
         </section>
         <button id="clear-annotations" type="button" disabled title="Remove every highlight and comment in this document">Clear all</button>
         <div id="annotation-status" role="status" aria-live="polite"></div>
       </div>
+      <p id="live-reload-hint" class="live-reload-hint" hidden title="Changes to files in this folder will not appear on their own. Reload the page to pick them up.">Live reload is off for this folder (too many files).</p>
       <div class="theme-switcher">
         <label class="sidebar-label" for="theme-select">Theme</label>
         <select id="theme-select" aria-label="Select theme"></select>

@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io/fs"
@@ -19,7 +19,6 @@ import (
 	"github.com/bzon/spec-viewer/internal/config"
 	"github.com/bzon/spec-viewer/internal/instance"
 	"github.com/bzon/spec-viewer/internal/server"
-	"github.com/bzon/spec-viewer/internal/watcher"
 )
 
 var version = "dev"
@@ -70,14 +69,22 @@ func main() {
 		log.Fatalf("error resolving path: %v", err)
 	}
 
+	// Hand-off only exists between loopback servers. A server bound to a
+	// network-reachable host neither takes the lock nor receives folders from
+	// other invocations, and this invocation does not hand its folder to one.
+	handoffEnabled := server.IsLoopbackHost(cfg.Host)
 	lockPath := instance.LockPath()
-	if info, alive := instance.CheckExisting(lockPath); alive {
-		_, openErr := instance.OpenInExisting(info, absTarget)
-		if openErr != nil {
-			log.Printf("warning: could not send file to existing instance: %v", openErr)
-		} else {
-			fmt.Printf("spec-viewer: sent %s to existing instance on port %d\n", absTarget, info.Port)
+	if handoffEnabled {
+		handoff := instance.TryHandoff(lockPath, absTarget)
+		if outcome := describeHandoff(handoff, absTarget, cfg.NoOpen, openBrowser); outcome.handled {
+			if outcome.failed {
+				fmt.Fprint(os.Stderr, outcome.message)
+				os.Exit(1)
+			}
+			fmt.Print(outcome.message)
 			os.Exit(0)
+		} else if outcome.message != "" {
+			log.Print(outcome.message)
 		}
 	}
 
@@ -102,33 +109,45 @@ func main() {
 		log.Fatalf("error creating server: %v", err)
 	}
 
-	info := instance.Info{
-		Port: srv.Port(),
-		PID:  os.Getpid(),
+	var token string
+	if handoffEnabled {
+		token, err = instance.NewToken()
+		if err != nil {
+			log.Fatalf("error: %v", err)
+		}
 	}
-	if err := instance.WriteLock(lockPath, info); err != nil {
-		log.Printf("warning: could not write lockfile: %v", err)
-	}
-	defer instance.Cleanup(lockPath)
-
-	w, err := watcher.New(absTarget, func(changedPath string) {
-		// An empty path still triggers a reload (file list refresh) without
-		// naming a document the browser could mistake for its current file.
-		rel, _ := server.RelativeDocumentPath(rootDir, changedPath)
-		msg, _ := json.Marshal(map[string]string{"type": "reload", "path": rel})
-		srv.Hub().Broadcast(msg)
-	})
-	if err != nil {
-		log.Printf("warning: could not start file watcher: %v", err)
-	} else {
-		defer w.Close()
-	}
+	srv.SetHandoff(token, version)
 
 	if !cfg.NoOpen {
-		go openBrowser(srv.URL())
+		go openBrowser(srv.DefaultWorkspaceURL())
 	}
 
-	fmt.Printf("spec-viewer: serving %s at %s\n", rootDir, srv.URL())
+	// Claim the lock last, right before serving, so a concurrent invocation
+	// that probes this instance finds a listening server. A healthy holder keeps
+	// the lock and this server runs alongside it, lock-less.
+	self := instance.Info{Port: srv.Port(), PID: os.Getpid(), Token: token}
+	var (
+		owned   bool
+		holder  instance.Info
+		lockErr error
+	)
+	if handoffEnabled {
+		owned, holder, lockErr = instance.AcquireLock(lockPath, self, instance.Healthy)
+		switch {
+		case lockErr != nil:
+			log.Printf("warning: could not write lockfile: %v", lockErr)
+		case owned:
+			defer instance.Release(lockPath, self.PID)
+		}
+	}
+
+	fmt.Printf("spec-viewer: serving %s at %s\n", absTarget, srv.DefaultWorkspaceURL())
+	if !handoffEnabled {
+		fmt.Printf("spec-viewer: hand-off is disabled because this server is network-exposed (host %q)\n", cfg.Host)
+	}
+	if handoffEnabled && lockErr == nil && !owned {
+		fmt.Printf("spec-viewer: another viewer on port %d keeps the shared lock; this server runs alongside it\n", holder.Port)
+	}
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
@@ -145,6 +164,38 @@ func main() {
 	if startErr := srv.Start(); startErr != nil {
 		log.Printf("server stopped: %v", startErr)
 	}
+}
+
+// handoffOutcome is what main does after trying to hand the target to a running instance.
+type handoffOutcome struct {
+	handled bool   // the hand-off is settled and no server should start; print message and exit
+	failed  bool   // with handled: the instance refused the path, so print message to stderr and exit 1
+	message string // stdout text when delivered, otherwise a log line (may be empty)
+}
+
+// describeHandoff decides what to do with a TryHandoff result. When the
+// instance accepted the path it opens a browser tab through openURL only if no
+// tab is connected to that workspace and noOpen is unset. A refusal of the path
+// itself (missing, not markdown) ends the command; any other failure of a live
+// instance falls back to a separate server that leaves its lock alone.
+func describeHandoff(h instance.Handoff, target string, noOpen bool, openURL func(string)) handoffOutcome {
+	var rejected *instance.RejectedError
+	switch {
+	case h.Done:
+		url := fmt.Sprintf("http://localhost:%d%s", h.Info.Port, h.Result.URL)
+		if h.Result.Clients == 0 && !noOpen {
+			openURL(url)
+		}
+		return handoffOutcome{handled: true, message: fmt.Sprintf(
+			"spec-viewer: sent %s to existing instance on port %d\nspec-viewer: url %s\n", target, h.Info.Port, url)}
+	case errors.As(h.Err, &rejected):
+		return handoffOutcome{handled: true, failed: true, message: fmt.Sprintf(
+			"spec-viewer: the viewer on port %d refused %s: %s\n", h.Info.Port, target, rejected.Message)}
+	case h.Holder:
+		return handoffOutcome{message: fmt.Sprintf(
+			"warning: could not send %s to the viewer on port %d: %v; starting a separate server without taking over its lock", target, h.Info.Port, h.Err)}
+	}
+	return handoffOutcome{}
 }
 
 func openBrowser(url string) {

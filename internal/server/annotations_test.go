@@ -386,3 +386,162 @@ func TestAnnotationsDocumentPathHeaderRoundTrip(t *testing.T) {
 		t.Fatalf("decoded header %q does not end in %q", decoded, name)
 	}
 }
+
+func (f replyFixture) status(body string) *httptest.ResponseRecorder {
+	return f.do(f.api.HandleAnnotationStatus, http.MethodPost, "/api/annotations/status?path=doc.md", "application/json", body)
+}
+
+func TestAnnotationsOldFormatHasNoMarks(t *testing.T) {
+	f := newReplyFixture(t)
+	old := `{"documents":{` + strconv.Quote(filepath.Join(f.root, "doc.md")) + `:[{"id":"a1","quote":"Document","created_at":"2024-01-01T00:00:00Z","updated_at":"2024-01-01T00:00:00Z"}]}}`
+	writeFile(t, f.storePath, old)
+	rec := f.do(f.api.HandleAnnotations, http.MethodGet, "/api/annotations?path=doc.md", "", "")
+	for _, key := range []string{"sent_at", "read_at", "read_by"} {
+		if strings.Contains(rec.Body.String(), key) {
+			t.Fatalf("unexpected %s in %s", key, rec.Body.String())
+		}
+	}
+}
+
+func TestAnnotationsPutMarks(t *testing.T) {
+	f := newReplyFixture(t)
+	f.put(t, `{"annotations":[{"id":"a1","quote":"Document","note":"n"}]}`)
+	if rec := f.status(`{"status":"read","by":"bot","annotation_ids":["a1"]}`); rec.Code != http.StatusOK {
+		t.Fatalf("status %d", rec.Code)
+	}
+	before := f.list(t)[0]
+	if before.SentAt == nil || before.ReadAt == nil || before.ReadBy != "bot" {
+		t.Fatalf("marks not set: %#v", before)
+	}
+
+	// Unchanged note keeps stored marks and ignores incoming values; new ids get none.
+	forged := `"sent_at":"2001-01-01T00:00:00Z","read_at":"2001-01-01T00:00:00Z","read_by":"evil"`
+	f.put(t, `{"annotations":[{"id":"a1","quote":"Document","note":"n",`+forged+`},{"id":"a2","quote":"Document",`+forged+`}]}`)
+	got := f.list(t)
+	if !got[0].SentAt.Equal(*before.SentAt) || !got[0].ReadAt.Equal(*before.ReadAt) || got[0].ReadBy != "bot" {
+		t.Fatalf("marks not kept: %#v", got[0])
+	}
+	if got[1].SentAt != nil || got[1].ReadAt != nil || got[1].ReadBy != "" {
+		t.Fatalf("new annotation has marks: %#v", got[1])
+	}
+
+	// Changed note clears marks.
+	f.put(t, `{"annotations":[{"id":"a1","quote":"Document","note":"edited"}]}`)
+	if got := f.list(t)[0]; got.SentAt != nil || got.ReadAt != nil || got.ReadBy != "" {
+		t.Fatalf("marks not cleared: %#v", got)
+	}
+}
+
+func TestAnnotationStatusSentAndRead(t *testing.T) {
+	f := newReplyFixture(t)
+	f.put(t, oneAnnotation)
+
+	// read without sent_at sets both; empty by becomes "agent".
+	rec := f.status(`{"status":"read","annotation_ids":["a1"]}`)
+	if rec.Code != http.StatusOK || strings.TrimSpace(rec.Body.String()) != `{"unknown":[],"updated":1}` {
+		t.Fatalf("unexpected response %d %s", rec.Code, rec.Body.String())
+	}
+	got := f.list(t)[0]
+	if got.SentAt == nil || got.ReadAt == nil || got.ReadBy != "agent" {
+		t.Fatalf("read marks wrong: %#v", got)
+	}
+
+	// sent clears the previous read.
+	if rec := f.status(`{"status":"sent","by":"ignored","annotation_ids":["a1"]}`); rec.Code != http.StatusOK {
+		t.Fatalf("status %d", rec.Code)
+	}
+	got = f.list(t)[0]
+	if got.SentAt == nil || got.ReadAt != nil || got.ReadBy != "" {
+		t.Fatalf("sent marks wrong: %#v", got)
+	}
+}
+
+func TestAnnotationStatusUnknownIDsAndBroadcast(t *testing.T) {
+	f := newReplyFixture(t)
+	f.put(t, oneAnnotation)
+	ch := make(chan []byte, 4)
+	f.hub.Register(ch)
+
+	rec := f.status(`{"status":"sent","annotation_ids":["nope"]}`)
+	if rec.Code != http.StatusOK || strings.TrimSpace(rec.Body.String()) != `{"unknown":["nope"],"updated":0}` {
+		t.Fatalf("unexpected response %d %s", rec.Code, rec.Body.String())
+	}
+	if len(ch) != 0 {
+		t.Fatal("broadcast with nothing updated")
+	}
+
+	rec = f.status(`{"status":"sent","annotation_ids":["a1","nope"]}`)
+	if strings.TrimSpace(rec.Body.String()) != `{"unknown":["nope"],"updated":1}` {
+		t.Fatalf("unexpected response %s", rec.Body.String())
+	}
+	select {
+	case msg := <-ch:
+		if string(msg) != `{"path":"doc.md","type":"annotations"}` {
+			t.Fatalf("unexpected broadcast: %s", msg)
+		}
+	default:
+		t.Fatal("no broadcast after update")
+	}
+}
+
+func TestAnnotationStatusRejects(t *testing.T) {
+	f := newReplyFixture(t)
+	f.put(t, oneAnnotation)
+	tests := []struct {
+		name        string
+		contentType string
+		body        string
+		want        int
+	}{
+		{"bad status", "application/json", `{"status":"seen","annotation_ids":["a1"]}`, http.StatusBadRequest},
+		{"empty ids", "application/json", `{"status":"sent","annotation_ids":[]}`, http.StatusBadRequest},
+		{"empty id", "application/json", `{"status":"sent","annotation_ids":[""]}`, http.StatusBadRequest},
+		{"long id", "application/json", `{"status":"sent","annotation_ids":["` + strings.Repeat("x", 129) + `"]}`, http.StatusBadRequest},
+		{"by newline", "application/json", `{"status":"read","by":"a\nb","annotation_ids":["a1"]}`, http.StatusBadRequest},
+		{"by too long", "application/json", `{"status":"read","by":"` + strings.Repeat("x", 65) + `","annotation_ids":["a1"]}`, http.StatusBadRequest},
+		{"unknown field", "application/json", `{"status":"sent","annotation_ids":["a1"],"x":1}`, http.StatusBadRequest},
+		{"wrong content type", "text/plain", `{"status":"sent","annotation_ids":["a1"]}`, http.StatusUnsupportedMediaType},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := f.do(f.api.HandleAnnotationStatus, http.MethodPost, "/api/annotations/status?path=doc.md", tt.contentType, tt.body)
+			if rec.Code != tt.want {
+				t.Fatalf("status %d, want %d", rec.Code, tt.want)
+			}
+		})
+	}
+	rec := f.do(f.api.HandleAnnotationStatus, http.MethodGet, "/api/annotations/status?path=doc.md", "", "")
+	if rec.Code != http.StatusMethodNotAllowed || rec.Header().Get("Allow") != "POST" {
+		t.Fatalf("GET: status %d allow %q", rec.Code, rec.Header().Get("Allow"))
+	}
+}
+
+func TestRepliesAndMarks(t *testing.T) {
+	f := newReplyFixture(t)
+	f.put(t, oneAnnotation)
+	f.status(`{"status":"read","annotation_ids":["a1"]}`)
+
+	// Agent reply keeps marks.
+	if rec := f.reply("a1", "ack"); rec.Code != http.StatusCreated {
+		t.Fatalf("reply status %d", rec.Code)
+	}
+	if got := f.list(t)[0]; got.SentAt == nil || got.ReadAt == nil {
+		t.Fatalf("agent reply cleared marks: %#v", got)
+	}
+
+	// Deleting a reply keeps marks.
+	reply := f.list(t)[0].Replies[0]
+	f.do(f.api.HandleReplies, http.MethodDelete, "/api/annotations/replies?path=doc.md&annotation_id=a1&reply_id="+reply.ID, "", "")
+	if got := f.list(t)[0]; got.SentAt == nil || got.ReadAt == nil {
+		t.Fatalf("delete cleared marks: %#v", got)
+	}
+
+	// Reply with empty author clears marks.
+	rec := f.do(f.api.HandleReplies, http.MethodPost, "/api/annotations/replies?path=doc.md", "application/json", `{"annotation_id":"a1","body":"more"}`)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("reply status %d", rec.Code)
+	}
+	if got := f.list(t)[0]; got.SentAt != nil || got.ReadAt != nil || got.ReadBy != "" {
+		t.Fatalf("user reply did not clear marks: %#v", got)
+	}
+}

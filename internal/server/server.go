@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
+	"log"
 	"net"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -16,32 +18,37 @@ import (
 
 // Server holds all components needed to serve the spec-viewer UI.
 type Server struct {
-	hub      *Hub
 	api      *API
 	assets   fs.FS
 	listener net.Listener
 	srv      *http.Server
 	theme    string
+	hosts    hostPolicy
 }
 
 // New creates a new Server. It binds the listener, creates the Hub and API,
 // and wires up all HTTP routes.
 func New(root string, assets fs.FS, host string, port int, theme string, targetFile string) (*Server, error) {
-	hub := NewHub()
-	api := NewAPI(root, hub, targetFile)
+	api := NewAPI(root, NewHub(), targetFile)
 
-	addr := fmt.Sprintf("%s:%d", host, port)
+	addr := net.JoinHostPort(host, strconv.Itoa(port))
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		return nil, fmt.Errorf("listen %s: %w", addr, err)
 	}
+	api.SetListenPort(ln.Addr().(*net.TCPAddr).Port)
+	api.SetExposed(!IsLoopbackHost(host))
+
+	if err := api.EnableWatching(); err != nil {
+		log.Printf("warning: could not start file watcher: %v", err)
+	}
 
 	s := &Server{
-		hub:      hub,
 		api:      api,
 		assets:   assets,
 		listener: ln,
 		theme:    theme,
+		hosts:    newHostPolicy(host),
 	}
 
 	mux := http.NewServeMux()
@@ -50,13 +57,17 @@ func New(root string, assets fs.FS, host string, port int, theme string, targetF
 	mux.HandleFunc("/api/themes", api.HandleThemes)
 	mux.HandleFunc("/api/annotations", api.HandleAnnotations)
 	mux.HandleFunc("/api/annotations/replies", api.HandleReplies)
+	mux.HandleFunc("/api/annotations/status", api.HandleAnnotationStatus)
 	mux.HandleFunc("/api/open", api.HandleOpen)
+	mux.HandleFunc("/api/workspaces", api.HandleWorkspaces)
+	mux.HandleFunc("/api/health", api.HandleHealth)
 	mux.HandleFunc("/ws", s.handleWebSocket)
 	mux.HandleFunc("/css/themes/", s.handleThemeCSS)
+	mux.HandleFunc("/w/", s.handleWorkspace)
 	mux.HandleFunc("/", s.handleRoot)
 
 	s.srv = &http.Server{
-		Handler:           mux,
+		Handler:           s.hosts.middleware(mux),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	return s, nil
@@ -72,9 +83,19 @@ func (s *Server) URL() string {
 	return fmt.Sprintf("http://localhost:%d", s.Port())
 }
 
-// Hub returns the underlying Hub.
+// SetHandoff sets the secret /api/open requires and the version /api/health reports.
+func (s *Server) SetHandoff(token, version string) {
+	s.api.SetHandoff(token, version)
+}
+
+// DefaultWorkspaceURL returns the full URL of the workspace the server started with.
+func (s *Server) DefaultWorkspaceURL() string {
+	return s.URL() + "/w/" + s.api.reg.defaultWS.id + "/"
+}
+
+// Hub returns the default workspace's Hub.
 func (s *Server) Hub() *Hub {
-	return s.hub
+	return s.api.reg.defaultWS.hub
 }
 
 // Start begins serving HTTP requests. It blocks until the server stops.
@@ -84,6 +105,7 @@ func (s *Server) Start() error {
 
 // Shutdown gracefully shuts down the server.
 func (s *Server) Shutdown(ctx context.Context) error {
+	s.api.Close()
 	return s.srv.Shutdown(ctx)
 }
 
@@ -109,36 +131,81 @@ func (s *Server) handleThemeCSS(w http.ResponseWriter, r *http.Request) {
 	http.NotFound(w, r)
 }
 
-// handleRoot serves index.html with the configured theme CSS injected, or
-// serves other static assets from the embedded FS.
+// handleRoot redirects the bare page URL to the default workspace and serves
+// the app's embedded assets (css, js, fonts) from their global paths.
 func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Path
 	if path == "/" || path == "/index.html" {
-		s.serveIndex(w, r)
+		http.Redirect(w, r, "/w/"+s.api.reg.defaultWS.id+"/", http.StatusFound)
 		return
 	}
 
-	// Serve from embedded assets.
 	rel := strings.TrimPrefix(path, "/")
 	if _, err := fs.Stat(s.assets, rel); err == nil {
 		http.FileServer(http.FS(s.assets)).ServeHTTP(w, r)
 		return
 	}
+	http.NotFound(w, r)
+}
 
-	// Fallback: serve static files (images, etc.) from root directory.
-	// Only serve known safe file types to avoid leaking source code.
-	if isStaticAsset(rel) {
-		localPath := filepath.Join(s.api.root, filepath.FromSlash(rel))
-		localPath = filepath.Clean(localPath)
-		if strings.HasPrefix(localPath, s.api.root) {
-			if _, err := os.Stat(localPath); err == nil {
+// handleWorkspace serves /w/<id>/: index.html at the workspace root and, below
+// it, static files (images etc.) from that workspace's root only.
+func (s *Server) handleWorkspace(w http.ResponseWriter, r *http.Request) {
+	id, sub, hasSlash := strings.Cut(strings.TrimPrefix(r.URL.Path, "/w/"), "/")
+	ws, ok := s.api.reg.lookup(id)
+	if id == "" || !ok {
+		http.Error(w, "unknown workspace", http.StatusNotFound)
+		return
+	}
+	if !hasSlash {
+		target := "/w/" + id + "/"
+		if r.URL.RawQuery != "" {
+			target += "?" + r.URL.RawQuery
+		}
+		http.Redirect(w, r, target, http.StatusFound)
+		return
+	}
+	if sub == "" || sub == "index.html" {
+		s.serveIndex(w, r)
+		return
+	}
+
+	// Only serve known safe file types to avoid leaking source code. Markdown
+	// and other text are not on the list, so a single-file workspace cannot
+	// expose its folder's documents here. Dotfiles and dot-directories are
+	// never served.
+	if isStaticAsset(sub) && !hasDotSegment(sub) {
+		if localPath, err := ws.resolveInside(sub); err == nil {
+			if info, err := os.Stat(localPath); err == nil && !info.IsDir() {
+				setActiveContentHeaders(w, localPath)
 				http.ServeFile(w, r, localPath)
 				return
 			}
 		}
 	}
-
 	http.NotFound(w, r)
+}
+
+// hasDotSegment reports a slash path with a segment starting with a dot.
+func hasDotSegment(p string) bool {
+	for _, seg := range strings.Split(p, "/") {
+		if strings.HasPrefix(seg, ".") && seg != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// setActiveContentHeaders stops a served asset from acting in the viewer's
+// origin: nosniff keeps the browser to the declared type, and a sandbox CSP
+// disables script in an SVG or PDF opened directly (an <img> never runs
+// script anyway). HTML is not an allowed asset type.
+func setActiveContentHeaders(w http.ResponseWriter, path string) {
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".svg", ".pdf":
+		w.Header().Set("Content-Security-Policy", "sandbox")
+	}
 }
 
 // isStaticAsset returns true for file extensions safe to serve from the root directory.
@@ -176,8 +243,14 @@ func (s *Server) serveIndex(w http.ResponseWriter, r *http.Request) {
 // It runs a write loop forwarding hub messages to the client and a read loop
 // to keep the connection alive.
 func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
+	ws, ok := s.api.lookupWorkspace(w, r)
+	if !ok {
+		return
+	}
+	// Besides an Origin equal to the (validated) Host, accept this server's own
+	// loopback origins on its listening port: the same rule /api/open uses.
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
-		OriginPatterns: []string{"localhost:*", "127.0.0.1:*"},
+		OriginPatterns: originPatterns(s.Port()),
 	})
 	if err != nil {
 		return
@@ -185,8 +258,8 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	defer conn.CloseNow()
 
 	ch := make(chan []byte, 16)
-	s.hub.Register(ch)
-	defer s.hub.Unregister(ch)
+	ws.hub.Register(ch)
+	defer ws.hub.Unregister(ch)
 
 	ctx := conn.CloseRead(r.Context())
 

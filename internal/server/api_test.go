@@ -124,10 +124,12 @@ func TestHandleOpen(t *testing.T) {
 	hub.Register(ch)
 
 	api := server.NewAPI(dir, hub, "")
+	api.SetHandoff(openTestToken, "test")
 
 	body := `{"path":"doc.md"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/open", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(server.OpenTokenHeader, openTestToken)
 	w := httptest.NewRecorder()
 	api.HandleOpen(w, req)
 
@@ -135,7 +137,7 @@ func TestHandleOpen(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
 
-	var resp map[string]string
+	var resp map[string]any
 	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
 		t.Fatal(err)
 	}
@@ -162,10 +164,12 @@ func TestHandleOpenNonMd(t *testing.T) {
 
 	hub := server.NewHub()
 	api := server.NewAPI(dir, hub, "")
+	api.SetHandoff(openTestToken, "test")
 
 	body := `{"path":"doc.txt"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/open", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(server.OpenTokenHeader, openTestToken)
 	w := httptest.NewRecorder()
 	api.HandleOpen(w, req)
 

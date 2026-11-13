@@ -465,6 +465,7 @@ body {
 }
 
 #highlight-toggle,
+#copy-feedback,
 #copy-prompt {
   display: flex;
   align-items: center;
@@ -481,6 +482,7 @@ body {
 }
 
 #highlight-toggle:hover,
+#copy-feedback:hover:not(:disabled),
 #copy-prompt:hover:not(:disabled) {
   color: var(--text);
   border-color: var(--text-muted);
@@ -620,6 +622,7 @@ body {
 .diagram-expand:focus-visible,
 .annotation-block-marker:focus-visible,
 .comment-item:focus-visible,
+#copy-feedback:focus-visible,
 #copy-prompt:focus-visible,
 #clear-annotations:focus-visible,
 #highlight-toggle:focus-visible {
@@ -633,11 +636,24 @@ body {
   display: none !important;
 }
 
+#copy-feedback,
 #copy-prompt {
   justify-content: center;
   margin-top: 8px;
 }
 
+/* Copy feedback is the common action; Copy prompt is the quieter alternative. */
+#copy-feedback {
+  color: var(--text);
+}
+
+#copy-prompt {
+  margin-top: 6px;
+  color: var(--text-muted);
+  background: transparent;
+}
+
+#copy-feedback:disabled,
 #copy-prompt:disabled {
   opacity: 0.5;
   cursor: default;
@@ -738,6 +754,36 @@ body {
   font-style: italic;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.comment-item-state.unsent::before {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 4px;
+  vertical-align: 1px;
+  background: var(--accent);
+  border-radius: 50%;
+  content: '';
+}
+
+.comment-item-state.read {
+  opacity: 0.85;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.annotation-delivery {
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 11px;
 }
 
 .comment-item-text {
@@ -954,7 +1000,8 @@ body {
   padding: 0 0 8px;
 }
 
-#theme-select {
+#theme-select,
+#workspace-select {
   width: 100%;
   padding: 6px 28px 6px 8px;
   background-color: var(--code-bg);
@@ -972,8 +1019,33 @@ body {
   -webkit-appearance: none;
 }
 
-#theme-select:focus {
+#theme-select:focus,
+#workspace-select:focus {
   border-color: var(--accent);
+}
+
+/* ============================================================
+   Workspace Switcher (only while several folders are open)
+   ============================================================ */
+
+.workspace-switcher {
+  padding: 0 16px 16px;
+}
+
+.workspace-switcher .sidebar-label {
+  padding: 0 0 8px;
+}
+
+.workspace-gone {
+  color: var(--text-muted);
+}
+
+.live-reload-hint {
+  margin: 0;
+  padding: 0 16px 16px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-muted);
 }
 
 /* ============================================================
@@ -1023,7 +1095,8 @@ body {
 
 .file-item:focus-visible,
 .toc-item:focus-visible,
-#theme-select:focus-visible {
+#theme-select:focus-visible,
+#workspace-select:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }

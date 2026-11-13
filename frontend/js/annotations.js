@@ -1,4 +1,5 @@
-import { buildPrompt } from './annotation-prompt.js';
+import { buildFeedback, buildPrompt } from './annotation-prompt.js';
+import { apiUrl, workspaceId } from './workspace.js';
 
 const BLOCK_SELECTOR = 'p, li, h1, h2, h3, h4, td, th';
 const CONTEXT_LENGTH = 64;
@@ -14,14 +15,18 @@ const DIAGRAM_OR_CODE = 'pre.mermaid, .code-block-wrapper';
 const BLOCK_CONTROLS = '.copy-btn, .annotation-block-add, .diagram-expand';
 const NON_TEXT = `svg, style, ${BLOCK_CONTROLS}, .annotation-block-marker`;
 
+const DELIVERY_FIELDS = ['sent_at', 'read_at', 'read_by'];
+
 let root;
 let toggle;
 let status;
 let commentsList;
 let commentsEmpty;
 let copyButton;
+let feedbackButton;
 let clearButton;
 let active = false;
+let suspended = false; // the folder is gone; nothing can be created or saved
 let currentFile = null;
 let loadState = 'loading'; // 'loading' | 'ready' | 'failed' for currentFile
 let reopenRequest = null; // thread that was open when a live reload began
@@ -51,9 +56,11 @@ export function initAnnotations(options) {
   commentsList = options.commentsList;
   commentsEmpty = options.commentsEmpty;
   copyButton = options.copyButton;
+  feedbackButton = options.feedbackButton;
 
   toggle.addEventListener('click', () => setActive(!active));
   copyButton.addEventListener('click', copyPrompt);
+  feedbackButton.addEventListener('click', copyFeedback);
   clearButton = document.getElementById('clear-annotations');
   clearButton.addEventListener('click', clearAllAnnotations);
   fab = createFab();
@@ -144,6 +151,23 @@ export function beginDocument(filePath) {
   renderPanel();
 }
 
+// The document is no longer available: drop its comments and disable every control.
+export function suspendAnnotations() {
+  if (active) setActive(false);
+  suspended = true;
+  closePopover({ save: false });
+  hideFab();
+  currentFile = null;
+  annotations = [];
+  drafts.clear();
+  anchors.clear();
+  replyDrafts.clear();
+  blockMarkers = [];
+  loadState = 'failed';
+  setStatus('');
+  renderPanel();
+}
+
 export async function loadAnnotations(filePath) {
   if (filePath !== currentFile) beginDocument(filePath);
 
@@ -200,7 +224,7 @@ export async function refreshAnnotations(filePath) {
 }
 
 async function fetchAnnotations(filePath) {
-  const response = await fetch('/api/annotations?path=' + encodeURIComponent(filePath));
+  const response = await fetch(apiUrl('/api/annotations', { path: filePath }));
   if (!response.ok) throw new Error(response.statusText);
   let path = '';
   const header = response.headers.get('X-Document-Path');
@@ -241,6 +265,11 @@ function mergeServerData(loaded) {
     if (!server) continue;
     annotation.author = server.author ?? annotation.author;
     annotation.replies = Array.isArray(server.replies) ? server.replies : [];
+    // Delivery marks are server-owned: take them as they are, including their absence.
+    for (const field of DELIVERY_FIELDS) {
+      if (server[field]) annotation[field] = server[field];
+      else delete annotation[field];
+    }
     refreshMarkers(annotation);
   }
   renderPanel();
@@ -248,6 +277,7 @@ function mergeServerData(loaded) {
 }
 
 function setActive(next) {
+  if (suspended) return;
   active = next;
   toggle.setAttribute('aria-pressed', String(active));
   toggle.classList.toggle('active', active);
@@ -797,7 +827,7 @@ function saveAnnotations(message = '') {
   const payload = JSON.stringify({ annotations: annotations.filter((item) => !drafts.has(item.id)).map(serializeAnnotation) });
   const run = async () => {
     try {
-      const response = await fetch('/api/annotations?path=' + encodeURIComponent(file), {
+      const response = await fetch(apiUrl('/api/annotations', { path: file }), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: payload,
@@ -849,7 +879,7 @@ async function postReply(annotation, body) {
   if (drafts.has(annotation.id)) return false;
   const file = currentFile;
   try {
-    const response = await fetch(`/api/annotations/replies?path=${encodeURIComponent(file)}`, {
+    const response = await fetch(apiUrl('/api/annotations/replies', { path: file }), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ annotation_id: annotation.id, author: '', body }),
@@ -859,6 +889,7 @@ async function postReply(annotation, body) {
     if (currentFile === file) {
       const current = annotations.find((item) => item.id === annotation.id);
       if (current && !current.replies.some((item) => item.id === reply.id)) current.replies.push(reply);
+      if (current) clearDeliveryMarks(current); // a reply of mine makes the thread unsent again
       if (current) refreshMarkers(current);
       // The reply is sent: its text must not come back in a reopened popover.
       if (replyDrafts.get(annotation.id)?.trim() === body) replyDrafts.delete(annotation.id);
@@ -866,6 +897,7 @@ async function postReply(annotation, body) {
     }
     renderPanel();
     renderOpenThread({ scrollToEnd: true, onlyFor: annotation.id });
+    refreshAnnotations(file);
     return true;
   } catch {
     setStatus('Could not send reply');
@@ -875,7 +907,7 @@ async function postReply(annotation, body) {
 
 async function deleteReply(annotation, replyId) {
   const file = currentFile;
-  const query = `path=${encodeURIComponent(file)}&annotation_id=${encodeURIComponent(annotation.id)}&reply_id=${encodeURIComponent(replyId)}`;
+  const url = apiUrl('/api/annotations/replies', { path: file, annotation_id: annotation.id, reply_id: replyId });
   // Focus is on this reply's Delete button; once it is gone, hand focus to the
   // next reply's button, else the previous one's, else the reply box.
   let focusTarget = null;
@@ -884,7 +916,7 @@ async function deleteReply(annotation, replyId) {
     focusTarget = annotation.replies[index + 1]?.id ?? annotation.replies[index - 1]?.id ?? '';
   }
   try {
-    const response = await fetch('/api/annotations/replies?' + query, { method: 'DELETE' });
+    const response = await fetch(url, { method: 'DELETE' });
     if (!response.ok && response.status !== 404) throw new Error(response.statusText);
     if (currentFile === file) {
       const current = annotations.find((item) => item.id === annotation.id);
@@ -907,6 +939,7 @@ async function deleteReply(annotation, replyId) {
 
 function commitComment(annotation, text, message = '') {
   annotation.note = text;
+  clearDeliveryMarks(annotation); // the server clears them when the note changes
   annotation.updated_at = new Date().toISOString();
   drafts.delete(annotation.id);
   refreshMarkers(annotation);
@@ -1079,7 +1112,7 @@ function renderComment(annotation, state) {
     return;
   }
 
-  state.comment.append(entryHeader(annotation.author, annotation.created_at), bodyElement(annotation.note));
+  state.comment.append(entryHeader(annotation.author, annotation.created_at), bodyElement(annotation.note), deliveryLine(annotation));
   const edit = document.createElement('button');
   edit.type = 'button';
   edit.className = 'annotation-link';
@@ -1184,6 +1217,28 @@ function entryHeader(author, iso) {
   name.textContent = author || 'You';
   header.append(name, timeElement(iso));
   return header;
+}
+
+function deliveryLine(annotation) {
+  const line = document.createElement('div');
+  line.className = 'annotation-delivery';
+  const state = deliveryState(annotation);
+  if (state.kind === 'unsent') {
+    line.textContent = 'Not sent yet';
+    return line;
+  }
+  line.append(state.kind === 'read' ? `Read by ${state.by} ` : 'Sent ', timeElement(state.at));
+  return line;
+}
+
+function deliveryState(annotation) {
+  if (annotation.read_at) return { kind: 'read', at: annotation.read_at, by: annotation.read_by || 'agent' };
+  if (annotation.sent_at) return { kind: 'sent', at: annotation.sent_at };
+  return { kind: 'unsent' };
+}
+
+function clearDeliveryMarks(annotation) {
+  for (const field of DELIVERY_FIELDS) delete annotation[field];
 }
 
 function bodyElement(text) {
@@ -1446,13 +1501,18 @@ function panelEntries() {
 
 function renderPanel() {
   if (!commentsList) return;
+  if (toggle) toggle.disabled = suspended;
   const entries = panelEntries();
   const focusedId = commentsList.contains(document.activeElement) ? document.activeElement.dataset.annotationId : null;
   commentsList.textContent = '';
   commentsList.hidden = entries.length === 0;
   commentsEmpty.hidden = entries.length > 0;
-  copyButton.disabled = entries.length === 0;
-  clearButton.disabled = !annotations.some((item) => !drafts.has(item.id));
+  copyButton.disabled = suspended || entries.length === 0;
+  const unsentCount = entries.filter((item) => deliveryState(item).kind === 'unsent').length;
+  feedbackButton.disabled = suspended || entries.length === 0;
+  feedbackButton.textContent = unsentCount > 0 ? `Copy feedback (${unsentCount})` : 'Copy feedback';
+  feedbackButton.setAttribute('aria-label', unsentCount > 0 ? `Copy feedback, ${unsentCount} new ${unsentCount === 1 ? 'comment' : 'comments'}` : 'Copy feedback');
+  clearButton.disabled = suspended || !annotations.some((item) => !drafts.has(item.id));
 
   for (const annotation of entries) {
     const detached = anchors.get(annotation.id)?.detached ?? false;
@@ -1477,6 +1537,7 @@ function renderPanel() {
     if (annotation.replies.length > 0) parts.push(annotation.replies.length === 1 ? '1 reply' : `${annotation.replies.length} replies`);
     if (detached) parts.push('detached');
     meta.textContent = parts.join(' \u00B7 ');
+    meta.append(deliveryBadge(annotation));
 
     button.append(quote, text, meta);
     button.addEventListener('click', () => {
@@ -1490,6 +1551,25 @@ function renderPanel() {
   if (focusedId) {
     Array.from(commentsList.querySelectorAll('.comment-item')).find((el) => el.dataset.annotationId === focusedId)?.focus();
   }
+}
+
+// Quiet state at the end of the meta line. Unsent is the only one with a dot;
+// every state is also text, so it does not rely on colour.
+function deliveryBadge(annotation) {
+  const state = deliveryState(annotation);
+  const badge = document.createElement('span');
+  badge.className = `comment-item-state ${state.kind}`;
+  if (state.kind === 'unsent') {
+    const hidden = document.createElement('span');
+    hidden.className = 'visually-hidden';
+    hidden.textContent = ' \u00B7 Not sent yet';
+    badge.append(hidden);
+    return badge;
+  }
+  const date = new Date(state.at);
+  if (!Number.isNaN(date.getTime())) badge.title = date.toLocaleString();
+  badge.textContent = ` \u00B7 ${state.kind === 'read' ? `Read by ${state.by}` : 'Sent'}`;
+  return badge;
 }
 
 function copyPrompt() {
@@ -1506,7 +1586,7 @@ function copyPrompt() {
     replies: annotation.replies,
   }));
   if (comments.length === 0 || !currentFile) return;
-  const text = buildPrompt({ documentPath, relativePath: currentFile, origin: location.origin, comments });
+  const text = buildPrompt({ documentPath, relativePath: currentFile, origin: location.origin, workspaceId, comments });
   if (!navigator.clipboard?.writeText) {
     setStatus('Could not copy prompt');
     return;
@@ -1515,6 +1595,84 @@ function copyPrompt() {
     () => setStatus('Prompt copied', 2000),
     () => setStatus('Could not copy prompt'),
   );
+}
+
+function headingBefore(node) {
+  let heading = '';
+  for (const candidate of root.querySelectorAll('h1, h2, h3, h4, h5, h6')) {
+    if (!(candidate.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING)) break;
+    heading = shorten(stableText(candidate), 120);
+  }
+  return heading;
+}
+
+// Copies the unsent comments (or all of them again when none is unsent), then
+// marks the copied ones as sent. The clipboard write must start synchronously
+// inside the click, so the text is built from memory before anything is awaited.
+function copyFeedback() {
+  if (!annotationsReady() || !currentFile) return;
+  const all = panelEntries();
+  if (all.length === 0) return;
+  const unsent = all.filter((item) => deliveryState(item).kind === 'unsent');
+  const chosen = unsent.length > 0 ? unsent : all;
+  const comments = chosen.map((annotation) => {
+    const anchor = anchors.get(annotation.id);
+    const kind = blockKind(annotation);
+    return {
+      id: annotation.id,
+      scope: annotation.scope,
+      blockCount: annotation.block_count || 1,
+      blockKind: kind,
+      heading: /^(Diagram|Code block|Table)/.test(kind) ? headingBefore(anchor.nodes[0]) : '',
+      quote: annotation.quote,
+      detached: anchor?.detached ?? false,
+      note: annotation.note,
+      replies: annotation.replies,
+    };
+  });
+  const fileName = currentFile.split('/').pop();
+  const text = buildFeedback({ fileName, relativePath: currentFile, origin: location.origin, workspaceId, comments });
+  if (!navigator.clipboard?.writeText) {
+    setStatus('Could not copy feedback');
+    return;
+  }
+  const file = currentFile;
+  const ids = chosen.map((item) => item.id);
+  const noun = ids.length === 1 ? '1 comment' : `${ids.length} comments`;
+  const copied = unsent.length > 0 ? `Feedback copied: ${noun}` : `No new comments: copied all ${ids.length} again`;
+  navigator.clipboard.writeText(text).then(
+    async () => {
+      setStatus(copied, 3000);
+      // Copying everything again changes nothing: marking would reset read marks.
+      if (unsent.length === 0) return;
+      const marked = await markSent(file, ids);
+      if (!marked) setStatus('Feedback copied, but could not be marked as sent', 4000);
+    },
+    () => setStatus('Could not copy feedback'),
+  );
+}
+
+// Queued behind pending saves so a new comment is stored before it is marked.
+function markSent(file, annotationIds) {
+  const run = async () => {
+    try {
+      const response = await fetch(apiUrl('/api/annotations/status', { path: file }), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'sent', annotation_ids: annotationIds }),
+      });
+      if (!response.ok) throw new Error(response.statusText);
+      if (currentFile === file) {
+        const loaded = await fetchAnnotations(file);
+        if (currentFile === file) mergeServerData(loaded.items);
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  saveQueue = saveQueue.then(run, run);
+  return saveQueue;
 }
 
 // ---------------------------------------------------------------------------

@@ -1,6 +1,7 @@
 package watcher_test
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -119,5 +120,80 @@ func TestWatchDirectory(t *testing.T) {
 		// success
 	case <-time.After(500 * time.Millisecond):
 		t.Fatal("callback not fired within 500ms after creating new .md file")
+	}
+}
+
+func TestWatcherBudgetAndIdempotentClose(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "a.md")
+	if err := os.WriteFile(file, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	budget := watcher.NewBudget(1)
+	w, err := watcher.NewWithBudget(file, func(string) {}, budget)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if budget.Used() != 1 {
+		t.Fatalf("used=%d", budget.Used())
+	}
+	if _, err := watcher.NewWithBudget(file, func(string) {}, budget); !errors.Is(err, watcher.ErrBudgetExhausted) {
+		t.Fatalf("err=%v, want watcher.ErrBudgetExhausted", err)
+	}
+	if budget.Used() != 1 {
+		t.Fatalf("failed start changed budget: %d", budget.Used())
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if budget.Used() != 0 {
+		t.Fatalf("used after close=%d", budget.Used())
+	}
+}
+
+func TestWatchDirectoryGivenAsSymlink(t *testing.T) {
+	base := t.TempDir()
+	real := filepath.Join(base, "real")
+	if err := os.MkdirAll(filepath.Join(real, "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(base, "link")
+	if err := os.Symlink(real, link); err != nil {
+		t.Skipf("symlinks unsupported: %v", err)
+	}
+	nested := filepath.Join(real, "sub", "n.md")
+	if err := os.WriteFile(nested, []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	budget := watcher.NewBudget(100)
+	paths := make(chan string, 8)
+	w, err := watcher.NewWithBudget(link, func(p string) { paths <- p }, budget)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+	if budget.Used() < 2 {
+		t.Errorf("budget used %d, want the root and its subdirectory counted", budget.Used())
+	}
+
+	time.Sleep(50 * time.Millisecond)
+	if err := os.WriteFile(nested, []byte("b"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	resolved, err := filepath.EvalSymlinks(nested)
+	if err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case p := <-paths:
+		if p != resolved {
+			t.Errorf("event path %q, want resolved %q", p, resolved)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("no event for a file under a symlinked root")
 	}
 }

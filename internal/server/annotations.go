@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"mime"
 	"net/http"
 	"net/url"
@@ -53,6 +54,11 @@ type Annotation struct {
 	UpdatedAt  time.Time `json:"updated_at"`
 	// Replies are server-owned: PUT ignores incoming values and keeps stored ones.
 	Replies []Reply `json:"replies"`
+	// Delivery marks are server-owned: PUT ignores incoming values. They are
+	// cleared when the note is edited or the user adds a reply.
+	SentAt *time.Time `json:"sent_at,omitempty"`
+	ReadAt *time.Time `json:"read_at,omitempty"`
+	ReadBy string     `json:"read_by,omitempty"`
 }
 
 // Reply is a threaded comment on an annotation, typically posted by an agent.
@@ -70,6 +76,58 @@ type annotationData struct {
 type annotationStore struct {
 	path string
 	mu   sync.Mutex
+	// warned remembers the documents whose conflicting spellings were logged.
+	warned map[string]bool
+}
+
+// adopt makes primary the one key of a document that older versions may have
+// stored under another spelling of its path (symlink-resolved vs not). When
+// nothing is stored under primary, the first alternate holding annotations is
+// moved to primary atomically. When primary already holds annotations the
+// alternates are left untouched and a conflict is logged once; two non-empty
+// sets are never merged.
+func (s *annotationStore) adopt(primary string, alternates []string) error {
+	if len(alternates) == 0 {
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	data, err := s.read()
+	if err != nil {
+		return err
+	}
+	var holders []string
+	for _, alt := range alternates {
+		if len(data.Documents[alt]) > 0 {
+			holders = append(holders, alt)
+		}
+	}
+	if len(holders) == 0 {
+		return nil
+	}
+	if len(data.Documents[primary]) > 0 || len(holders) > 1 {
+		if !s.warned[primary] {
+			if s.warned == nil {
+				s.warned = make(map[string]bool)
+			}
+			s.warned[primary] = true
+			log.Printf("warning: annotations for %s exist under more than one path spelling (%s); using %s and leaving the others untouched", primary, strings.Join(holders, ", "), primaryOrFirst(data, primary, holders))
+		}
+		if len(data.Documents[primary]) > 0 {
+			return nil
+		}
+	}
+	data.Documents[primary] = data.Documents[holders[0]]
+	delete(data.Documents, holders[0])
+	return s.write(data)
+}
+
+func primaryOrFirst(data annotationData, primary string, holders []string) string {
+	if len(data.Documents[primary]) > 0 {
+		return primary
+	}
+	return holders[0]
 }
 
 func defaultAnnotationsPath() string {
@@ -142,7 +200,61 @@ func newReplyID() (string, error) {
 	return hex.EncodeToString(buf), nil
 }
 
-func (s *annotationStore) addReply(document, annotationID string, reply Reply) (Reply, error) {
+// clearMarks removes the delivery marks from an annotation.
+func (a *Annotation) clearMarks() {
+	a.SentAt, a.ReadAt, a.ReadBy = nil, nil, ""
+}
+
+// markStatus applies a "sent" or "read" mark to the listed annotations and
+// returns how many were changed and which ids were not found.
+func (s *annotationStore) markStatus(document, status, by string, ids []string) (int, []string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	data, err := s.read()
+	if err != nil {
+		return 0, nil, err
+	}
+	annotations := data.Documents[document]
+	index := make(map[string]int, len(annotations))
+	for i := range annotations {
+		index[annotations[i].ID] = i
+	}
+	now := time.Now().UTC()
+	updated := 0
+	unknown := []string{}
+	done := make(map[string]struct{}, len(ids))
+	for _, id := range ids {
+		if _, dup := done[id]; dup {
+			continue
+		}
+		done[id] = struct{}{}
+		i, found := index[id]
+		if !found {
+			unknown = append(unknown, id)
+			continue
+		}
+		a := &annotations[i]
+		switch status {
+		case "sent":
+			a.SentAt = &now
+			a.ReadAt, a.ReadBy = nil, ""
+		case "read":
+			if a.SentAt == nil {
+				a.SentAt = &now
+			}
+			a.ReadAt = &now
+			a.ReadBy = by
+		}
+		updated++
+	}
+	if updated == 0 {
+		return 0, unknown, nil
+	}
+	return updated, unknown, s.write(data)
+}
+
+func (s *annotationStore) addReply(document, annotationID string, reply Reply, clearMarks bool) (Reply, error) {
 	id, err := newReplyID()
 	if err != nil {
 		return Reply{}, err
@@ -166,6 +278,9 @@ func (s *annotationStore) addReply(document, annotationID string, reply Reply) (
 			return Reply{}, errTooManyReplies
 		}
 		annotations[i].Replies = append(annotations[i].Replies, reply)
+		if clearMarks {
+			annotations[i].clearMarks()
+		}
 		return reply, s.write(data)
 	}
 	return Reply{}, errAnnotationNotFound
@@ -208,13 +323,19 @@ func (s *annotationStore) put(document string, annotations []Annotation) error {
 		return err
 	}
 	// Replies are owned by the server: keep stored threads, drop incoming ones.
-	storedReplies := make(map[string][]Reply)
+	storedAnnotations := make(map[string]Annotation)
 	for _, stored := range data.Documents[document] {
-		storedReplies[stored.ID] = stored.Replies
+		storedAnnotations[stored.ID] = stored
 	}
 	author := defaultAuthor()
 	for i := range annotations {
-		annotations[i].Replies = storedReplies[annotations[i].ID]
+		stored, exists := storedAnnotations[annotations[i].ID]
+		annotations[i].Replies = stored.Replies
+		// Delivery marks are server-owned too; an edited note must go out again.
+		annotations[i].clearMarks()
+		if exists && stored.Note == annotations[i].Note {
+			annotations[i].SentAt, annotations[i].ReadAt, annotations[i].ReadBy = stored.SentAt, stored.ReadAt, stored.ReadBy
+		}
 		if annotations[i].Replies == nil {
 			annotations[i].Replies = []Reply{}
 		}
@@ -330,28 +451,40 @@ func validateAnnotations(annotations []Annotation) error {
 // resolveDocument validates the path query parameter shared by the annotation
 // endpoints and returns the absolute document path. On failure it writes the
 // error response and returns false.
-func (a *API) resolveDocument(w http.ResponseWriter, r *http.Request) (string, bool) {
+func (a *API) resolveDocument(w http.ResponseWriter, r *http.Request) (*workspace, string, bool) {
+	ws, ok := a.workspaceFor(w, r)
+	if !ok {
+		return nil, "", false
+	}
 	rel := r.URL.Query().Get("path")
 	ext := strings.ToLower(filepath.Ext(rel))
 	if ext != ".md" && ext != ".markdown" {
 		http.Error(w, "only markdown files are supported", http.StatusBadRequest)
-		return "", false
+		return nil, "", false
 	}
-	document, err := a.safePath(rel)
+	if !ws.allowsDocument(rel) {
+		writeJSONError(w, http.StatusForbidden, "this workspace serves a single file only")
+		return nil, "", false
+	}
+	document, err := ws.resolveInside(rel)
 	if err != nil {
 		http.Error(w, "forbidden", http.StatusForbidden)
-		return "", false
+		return nil, "", false
 	}
 	if _, err := os.Stat(document); err != nil {
 		http.Error(w, "not found", http.StatusNotFound)
-		return "", false
+		return nil, "", false
 	}
-	return document, true
+	if err := a.annotations.adopt(document, ws.alternateDocumentPaths(document)); err != nil {
+		http.Error(w, "could not load annotations", http.StatusInternalServerError)
+		return nil, "", false
+	}
+	return ws, document, true
 }
 
 // HandleAnnotations serves GET and PUT /api/annotations?path=X.
 func (a *API) HandleAnnotations(w http.ResponseWriter, r *http.Request) {
-	document, ok := a.resolveDocument(w, r)
+	_, document, ok := a.resolveDocument(w, r)
 	if !ok {
 		return
 	}
@@ -401,7 +534,7 @@ func (a *API) HandleReplies(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	document, ok := a.resolveDocument(w, r)
+	ws, document, ok := a.resolveDocument(w, r)
 	if !ok {
 		return
 	}
@@ -409,7 +542,7 @@ func (a *API) HandleReplies(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodDelete {
 		query := r.URL.Query()
 		err := a.annotations.deleteReply(document, query.Get("annotation_id"), query.Get("reply_id"))
-		if !a.finishReplyChange(w, document, err) {
+		if !a.finishReplyChange(w, ws, document, err) {
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
@@ -451,8 +584,9 @@ func (a *API) HandleReplies(w http.ResponseWriter, r *http.Request) {
 		author = defaultAuthor()
 	}
 
-	reply, err := a.annotations.addReply(document, req.AnnotationID, Reply{Author: author, Body: body})
-	if !a.finishReplyChange(w, document, err) {
+	// An empty author is the local user's own reply, which the agent has not seen.
+	reply, err := a.annotations.addReply(document, req.AnnotationID, Reply{Author: author, Body: body}, req.Author == "")
+	if !a.finishReplyChange(w, ws, document, err) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -462,13 +596,13 @@ func (a *API) HandleReplies(w http.ResponseWriter, r *http.Request) {
 
 // finishReplyChange maps a store error to a response. On success it broadcasts
 // an annotations message for the document and returns true. The path matches
-// the browser's current-file path (root-relative, slash-separated).
-func (a *API) finishReplyChange(w http.ResponseWriter, document string, err error) bool {
+// the browser's current-file path (relative to the workspace root, slash-separated).
+func (a *API) finishReplyChange(w http.ResponseWriter, ws *workspace, document string, err error) bool {
 	switch {
 	case err == nil:
-		rel, _ := RelativeDocumentPath(a.root, document)
+		rel, _ := RelativeDocumentPath(ws.root, document)
 		msg, _ := json.Marshal(map[string]string{"type": "annotations", "path": rel})
-		a.hub.Broadcast(msg)
+		ws.hub.Broadcast(msg)
 		return true
 	case errors.Is(err, errAnnotationNotFound), errors.Is(err, errReplyNotFound):
 		http.Error(w, err.Error(), http.StatusNotFound)
@@ -478,4 +612,68 @@ func (a *API) finishReplyChange(w http.ResponseWriter, document string, err erro
 		http.Error(w, "could not save reply", http.StatusInternalServerError)
 	}
 	return false
+}
+
+// HandleAnnotationStatus serves POST /api/annotations/status?path=X, marking
+// comments as sent to an agent or read by one.
+func (a *API) HandleAnnotationStatus(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", "POST")
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	ws, document, ok := a.resolveDocument(w, r)
+	if !ok {
+		return
+	}
+	mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if err != nil || mediaType != "application/json" {
+		http.Error(w, "content type must be application/json", http.StatusUnsupportedMediaType)
+		return
+	}
+	var req struct {
+		Status        string   `json:"status"`
+		AnnotationIDs []string `json:"annotation_ids"`
+		By            string   `json:"by"`
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&req); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	if req.Status != "sent" && req.Status != "read" {
+		http.Error(w, "invalid status", http.StatusBadRequest)
+		return
+	}
+	if len(req.AnnotationIDs) == 0 || len(req.AnnotationIDs) > maxAnnotations {
+		http.Error(w, "invalid annotation_ids", http.StatusBadRequest)
+		return
+	}
+	for _, id := range req.AnnotationIDs {
+		if id == "" || len(id) > 128 {
+			http.Error(w, "invalid annotation id", http.StatusBadRequest)
+			return
+		}
+	}
+	if utf8.RuneCountInString(req.By) > maxAuthorLength || hasUnsafeChar(req.By) {
+		http.Error(w, "invalid by", http.StatusBadRequest)
+		return
+	}
+	by := req.By
+	if by == "" {
+		by = "agent"
+	}
+
+	updated, unknown, err := a.annotations.markStatus(document, req.Status, by, req.AnnotationIDs)
+	if err != nil {
+		http.Error(w, "could not save status", http.StatusInternalServerError)
+		return
+	}
+	if updated > 0 {
+		a.finishReplyChange(w, ws, document, nil)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"updated": updated, "unknown": unknown})
 }
