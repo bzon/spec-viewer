@@ -1,0 +1,22 @@
+{
+  "name": "pi-spec-viewer",
+  "version": "0.2.2",
+  "private": true,
+  "description": "pi extension that adds a /spec-view command for the spec-viewer markdown viewer",
+  "license": "MIT",
+  "keywords": [
+    "pi-package"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bzon/spec-viewer.git"
+  },
+  "pi": {
+    "extensions": [
+      "./pi/spec-view.ts"
+    ],
+    "skills": [
+      "./skills"
+    ]
+  }
+}
