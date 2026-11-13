@@ -1,37 +1,15 @@
-import { spawn, type ChildProcess } from "node:child_process";
-import { closeSync, mkdtempSync, openSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { readdirSync, statSync } from "node:fs";
+import { homedir } from "node:os";
+import { join, resolve } from "node:path";
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
+import { registerSpecResponse } from "./spec-response.ts";
+import { launchViewer, notify as notifyWith, removeLogDir, type NotifyLevel, type StartedViewer } from "./viewer-launch.ts";
 
-const START_TIMEOUT_MS = 3000;
-const POLL_INTERVAL_MS = 50;
 const MAX_COMPLETIONS = 50;
 const SKIPPED_DIRECTORIES = new Set(["node_modules", ".git"]);
-const INSTALL_HINT =
-	"spec-viewer binary not found. Install it with `brew install bzon/tap/spec-viewer` " +
-	"or `go install github.com/bzon/spec-viewer/cmd/spec-viewer@latest`, " +
-	"or set SPEC_VIEWER_BIN to its path.";
-
-interface StartedViewer {
-	child: ChildProcess;
-	pid: number;
-	target: string;
-	url: string;
-	logPath: string;
-	exited: boolean;
-	/** Holds the single-instance lock, so other sessions may have handed folders to it. */
-	sharedInstance: boolean;
-}
-
-type NotifyLevel = "info" | "warning" | "error";
 
 function notify(ctx: ExtensionCommandContext, message: string, level: NotifyLevel = "info"): void {
-	if (ctx.hasUI) {
-		ctx.ui.notify(message, level);
-	} else {
-		console.error(`spec-view: ${message}`);
-	}
+	notifyWith("spec-view", ctx, message, level);
 }
 
 function expandPath(raw: string, cwd: string): string {
@@ -49,125 +27,28 @@ function isMarkdownFile(name: string): boolean {
 	return /\.(md|markdown)$/i.test(name);
 }
 
-function readLog(logPath: string): string {
-	try {
-		return readFileSync(logPath, "utf8");
-	} catch {
-		return "";
-	}
-}
-
-/** Remove the per-launch temp directory that holds the viewer's log. */
-function removeLogDir(logPath: string): void {
-	try {
-		rmSync(dirname(logPath), { recursive: true, force: true });
-	} catch {
-		// best effort: the OS temp cleaner gets it eventually
-	}
-}
-
-/**
- * True when the viewer printed neither "keeps the shared lock" (another viewer
- * owns it) nor "hand-off is disabled" (network-exposed, lock-less): it holds
- * the shared lock, so other sessions may have handed folders to it.
- */
-function holdsSharedLock(log: string): boolean {
-	return !/keeps the shared lock|hand-off is disabled/.test(log);
-}
-
-function sleep(ms: number): Promise<void> {
-	return new Promise((done) => setTimeout(done, ms));
-}
-
 export default function (pi: ExtensionAPI) {
 	const viewers: StartedViewer[] = [];
 	let sessionCwd = process.cwd();
 
 	async function start(target: string, ctx: ExtensionCommandContext): Promise<void> {
-		const bin = process.env.SPEC_VIEWER_BIN || "spec-viewer";
-		const logPath = join(mkdtempSync(join(tmpdir(), "spec-viewer-pi-")), "spec-viewer.log");
-		const logFd = openSync(logPath, "a");
-
-		let child: ChildProcess;
-		try {
-			child = spawn(bin, [target], {
-				cwd: ctx.cwd,
-				detached: true,
-				stdio: ["ignore", logFd, logFd],
-				windowsHide: true,
-			});
-		} finally {
-			closeSync(logFd);
-		}
-
-		let exitCode: number | null | undefined;
-		let spawnError: NodeJS.ErrnoException | undefined;
-		child.on("error", (err) => {
-			spawnError = err;
-		});
-		const record: StartedViewer = { child, pid: child.pid ?? -1, target, url: "", logPath, exited: false, sharedInstance: false };
-		child.on("exit", (code, signal) => {
-			record.exited = true;
-			exitCode = code ?? (signal ? -1 : 0);
-		});
-		child.unref();
-
-		const deadline = Date.now() + START_TIMEOUT_MS;
-		while (Date.now() < deadline) {
-			if (spawnError) break;
-			const log = readLog(logPath);
-			const served = log.match(/spec-viewer: serving .* at (\S+)/);
-			if (served) {
-				record.url = served[1];
-				// The lock notice is printed right after the serving line; give it a moment.
-				await sleep(150);
-				record.sharedInstance = holdsSharedLock(readLog(logPath));
-				viewers.push(record);
-				notify(ctx, `spec-viewer serving ${target} at ${record.url}`);
+		const result = await launchViewer(viewers, [target], ctx.cwd);
+		switch (result.kind) {
+			case "serving":
+				notify(ctx, `spec-viewer serving ${target} at ${result.url}`);
 				return;
-			}
-			const sent = log.match(/spec-viewer: sent .* to existing instance on port (\d+)/);
-			if (sent) {
-				// The process exits right after the hand-off, so it is not recorded in `viewers`:
-				// there is nothing for stop/status to manage, and its log is no longer needed.
-				removeLogDir(logPath);
-				const handedUrl = log.match(/spec-viewer: url (\S+)/);
+			case "sent":
 				notify(
 					ctx,
-					`Sent ${target} to the already-running spec-viewer (port ${sent[1]})` +
-						`${handedUrl ? ` at ${handedUrl[1]}` : ""}. That shared viewer was started elsewhere; ` +
+					`Sent ${target} to the already-running spec-viewer (port ${result.port})` +
+						`${result.url ? ` at ${result.url}` : ""}. That shared viewer was started elsewhere; ` +
 						"/spec-view stop does not stop it.",
 				);
 				return;
-			}
-			if (exitCode !== undefined) break;
-			await sleep(POLL_INTERVAL_MS);
+			case "problem":
+				notify(ctx, result.message, result.level);
+				return;
 		}
-
-		if (spawnError) {
-			removeLogDir(logPath);
-			if (spawnError.code === "ENOENT") {
-				notify(ctx, process.env.SPEC_VIEWER_BIN ? `${INSTALL_HINT} (SPEC_VIEWER_BIN=${bin} was not found)` : INSTALL_HINT, "error");
-			} else {
-				notify(ctx, `Could not start spec-viewer: ${spawnError.message}`, "error");
-			}
-			return;
-		}
-		const log = readLog(logPath).trim();
-		if (exitCode !== undefined) {
-			removeLogDir(logPath);
-			notify(
-				ctx,
-				exitCode === 0 && log
-					? log
-					: `spec-viewer exited with code ${exitCode}${log ? `: ${log}` : ""}`,
-				exitCode === 0 ? "info" : "error",
-			);
-			return;
-		}
-		// Still running with no recognisable output yet: keep tracking it, it may still come up.
-		viewers.push(record);
-		notify(ctx, `spec-viewer is still starting (no output after 3s). Log: ${logPath}`, "warning");
 	}
 
 	function stop(ctx: ExtensionCommandContext): void {
@@ -214,6 +95,8 @@ export default function (pi: ExtensionAPI) {
 		);
 		notify(ctx, `spec-viewer instances from this session:\n${lines.join("\n")}`);
 	}
+
+	registerSpecResponse(pi, viewers);
 
 	pi.registerCommand("spec-view", {
 		description: "Open a markdown file or directory in spec-viewer (also: stop, status; use ./stop or ./status for a path with those names)",

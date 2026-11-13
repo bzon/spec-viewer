@@ -2,7 +2,7 @@
   "name": "pi-spec-viewer",
   "version": "0.2.2",
   "private": true,
-  "description": "pi extension that adds a /spec-view command for the spec-viewer markdown viewer",
+  "description": "pi extension that adds /spec-view and /spec-response commands for the spec-viewer markdown viewer",
   "license": "MIT",
   "keywords": [
     "pi-package"
