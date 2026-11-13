@@ -49,9 +49,7 @@ To leave a review comment, just select text with the highlighter off and click t
 
 Click a highlight or marker to open its thread: the comment with author and time, replies in order, and a reply box (**Ctrl/Cmd+Enter** sends). You can edit your comment, delete replies, or remove the whole thing. The **Comments** list in the right sidebar shows every annotation with a note or replies; click one to jump to it. If the text changed and the anchor is gone, the comment is listed as detached and stays openable.
 
-**Copy prompt** copies a ready-to-paste prompt for a coding agent: the document path, each comment with its thread, and a `curl` command the agent uses to reply. Replies appear in the open thread live while the viewer is running.
-
-**Copy feedback** copies a short message for pasting into the agent's terminal as your reply: only comments not yet sent (or all of them again if none is new), each with the text it refers to, your comment and follow-ups, and a closing `curl` command the agent runs to mark them read. Copying marks those comments as sent, and the agent's acknowledgement shows as read in the Comments list and the thread; editing a comment or replying makes it unsent again. Unlike **Copy prompt**, it is not self-contained: use Copy prompt for an agent that has not seen the document.
+**Copy feedback** copies a short message for pasting into the agent's terminal as your reply: only comments not yet sent (or all of them again if none is new), each with the text it refers to, your comment and follow-ups, and a closing `curl` command the agent runs to mark them read. Copying marks those comments as sent, and the agent's acknowledgement shows as read in the Comments list and the thread; editing a comment or replying makes it unsent again. Agents can reply on a thread through the API while the viewer is running, and replies appear in the open thread live.
 
 **Clear all** removes every highlight and comment, replies included, from the open document after a confirmation; other documents are not affected.
 
@@ -79,7 +77,7 @@ The skill runs `spec-viewer` through the shell. The viewer opens automatically; 
 
 ### pi extension
 
-This repository is also a [pi](https://pi.dev) package that adds a `/spec-view` command (and the `spec-viewer` skill). Install the binary first, then:
+This repository is also a [pi](https://pi.dev) package that adds `/spec-view` and `/spec-response` commands (and the `spec-viewer` skill). Install the binary first, then:
 
 ```bash
 pi install git:github.com/bzon/spec-viewer
@@ -94,6 +92,15 @@ pi install /path/to/spec-viewer
 ```
 
 `path` is resolved against the session's working directory and may start with `@` or `~`; it must be a directory or a `.md`/`.markdown` file. The binary is found on `PATH`; set `SPEC_VIEWER_BIN` to use another one. `stop` only affects viewers this session started. When pi exits, started viewers keep running so the browser tab stays usable. Output is logged to a file in the OS temp directory.
+
+```
+/spec-response          show the latest assistant response and follow the session
+/spec-response open     reopen the browser on the latest response
+/spec-response status   show whether following is on, the folder, and the viewer URL
+/spec-response stop     stop following (files and the viewer stay)
+```
+
+`/spec-response` writes each finished assistant response of the session (text only, no thinking or tool calls) as a markdown file, opens the folder in the viewer, and then follows the session: after every agent turn the new response is written and an open tab jumps to it (a closed tab is not reopened). The first call also writes up to 9 earlier responses on the current branch. Following lasts for the current session only and stops on `/new`, `/resume`, `/fork`, reload and exit; run `/spec-response` again to resume. Files are named `<NNN>-<slug>.md` (for example `012-final-answer.md`) and live in `<pi agent dir>/cache/spec-viewer/responses/<project>-<session id prefix>/` (`~/.pi/agent/cache/...` by default, or under `PI_CODING_AGENT_DIR`). The folder is stable per session, so comments and Copy feedback work on responses like on any file. Nothing prunes these folders: delete them when you no longer need them.
 
 ### Building your own integration
 
@@ -121,6 +128,8 @@ curl -X POST http://localhost:PORT/api/open \
 ## Themes
 
 Five built-in themes: `github-light` (default), `github-dark`, `dracula`, `nord`, `solarized`.
+
+The theme chosen in the dropdown is remembered in the browser and used in every folder; `config.yaml` and `--theme` set the theme used when nothing is saved.
 
 ### Set a default theme
 
@@ -185,7 +194,7 @@ Flags:
 - Live reload on file save
 - Tree-grouped file list for directories
 - Cmd+K search across headings, filenames, and content
-- Persistent personal highlights, review comments with threads, block comments, and a copy-prompt for agents
+- Persistent personal highlights, review comments with threads, block comments, and a copy-feedback action for agents
 - 5 built-in themes + custom theme support
 - Single instance reuse (no duplicate servers)
 - Inter + JetBrains Mono fonts embedded

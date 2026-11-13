@@ -465,8 +465,7 @@ body {
 }
 
 #highlight-toggle,
-#copy-feedback,
-#copy-prompt {
+#copy-feedback {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -482,8 +481,7 @@ body {
 }
 
 #highlight-toggle:hover,
-#copy-feedback:hover:not(:disabled),
-#copy-prompt:hover:not(:disabled) {
+#copy-feedback:hover:not(:disabled) {
   color: var(--text);
   border-color: var(--text-muted);
 }
@@ -623,7 +621,6 @@ body {
 .annotation-block-marker:focus-visible,
 .comment-item:focus-visible,
 #copy-feedback:focus-visible,
-#copy-prompt:focus-visible,
 #clear-annotations:focus-visible,
 #highlight-toggle:focus-visible {
   outline: 2px solid var(--accent);
@@ -636,25 +633,13 @@ body {
   display: none !important;
 }
 
-#copy-feedback,
-#copy-prompt {
+#copy-feedback {
   justify-content: center;
   margin-top: 8px;
-}
-
-/* Copy feedback is the common action; Copy prompt is the quieter alternative. */
-#copy-feedback {
   color: var(--text);
 }
 
-#copy-prompt {
-  margin-top: 6px;
-  color: var(--text-muted);
-  background: transparent;
-}
-
-#copy-feedback:disabled,
-#copy-prompt:disabled {
+#copy-feedback:disabled {
   opacity: 0.5;
   cursor: default;
 }

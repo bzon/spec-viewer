@@ -1,4 +1,4 @@
-import { buildFeedback, buildPrompt } from './annotation-prompt.js';
+import { buildFeedback } from './annotation-feedback.js';
 import { apiUrl, workspaceId } from './workspace.js';
 
 const BLOCK_SELECTOR = 'p, li, h1, h2, h3, h4, td, th';
@@ -22,7 +22,6 @@ let toggle;
 let status;
 let commentsList;
 let commentsEmpty;
-let copyButton;
 let feedbackButton;
 let clearButton;
 let active = false;
@@ -31,7 +30,6 @@ let currentFile = null;
 let loadState = 'loading'; // 'loading' | 'ready' | 'failed' for currentFile
 let reopenRequest = null; // thread that was open when a live reload began
 let scrollFrame = 0;
-let documentPath = '';
 let annotations = [];
 let popover = null;
 let popoverState = null;
@@ -55,11 +53,9 @@ export function initAnnotations(options) {
   status = options.status;
   commentsList = options.commentsList;
   commentsEmpty = options.commentsEmpty;
-  copyButton = options.copyButton;
   feedbackButton = options.feedbackButton;
 
   toggle.addEventListener('click', () => setActive(!active));
-  copyButton.addEventListener('click', copyPrompt);
   feedbackButton.addEventListener('click', copyFeedback);
   clearButton = document.getElementById('clear-annotations');
   clearButton.addEventListener('click', clearAllAnnotations);
@@ -176,7 +172,6 @@ export async function loadAnnotations(filePath) {
     if (currentFile !== filePath) return;
     const loaded = await fetchAnnotations(filePath);
     if (currentFile !== filePath) return;
-    documentPath = loaded.documentPath;
     annotations = loaded.items.map(normalizeAnnotation);
     loadState = 'ready';
     applyAnnotations();
@@ -216,7 +211,6 @@ export async function refreshAnnotations(filePath) {
     if (currentFile !== filePath) return;
     const loaded = await fetchAnnotations(filePath);
     if (currentFile !== filePath) return;
-    documentPath = loaded.documentPath;
     mergeServerData(loaded.items);
   } catch {
     /* keep what is shown; the next event or reload will retry */
@@ -226,16 +220,7 @@ export async function refreshAnnotations(filePath) {
 async function fetchAnnotations(filePath) {
   const response = await fetch(apiUrl('/api/annotations', { path: filePath }));
   if (!response.ok) throw new Error(response.statusText);
-  let path = '';
-  const header = response.headers.get('X-Document-Path');
-  if (header) {
-    try {
-      path = decodeURIComponent(header);
-    } catch {
-      path = header;
-    }
-  }
-  return { items: await response.json(), documentPath: path };
+  return { items: await response.json() };
 }
 
 // Waits for queued saves so a read cannot overtake a pending write.
@@ -842,8 +827,7 @@ function saveAnnotations(message = '') {
       if (currentFile === file) {
         const loaded = await fetchAnnotations(file);
         if (currentFile === file) {
-          documentPath = loaded.documentPath;
-          mergeServerData(loaded.items);
+                mergeServerData(loaded.items);
         }
       }
       return true;
@@ -1390,7 +1374,7 @@ function quoteLine(annotation) {
   return `\u201C${truncated ? `${flat.slice(0, 120).trimEnd()}\u2026` : flat}\u201D`;
 }
 
-// Display-only label for a block comment; stored quote and the agent prompt keep the source text.
+// Display-only label for a block comment; stored quote and the copied feedback keep the source text.
 function blockLabel(annotation) {
   const anchor = anchors.get(annotation.id);
   if (!anchor || anchor.detached || !anchor.nodes[0]?.isConnected) return shorten(annotation.quote, 80);
@@ -1481,7 +1465,7 @@ function hideFab() {
 }
 
 // ---------------------------------------------------------------------------
-// Comments panel and prompt
+// Comments panel and feedback
 // ---------------------------------------------------------------------------
 
 function hasComment(annotation) {
@@ -1507,7 +1491,6 @@ function renderPanel() {
   commentsList.textContent = '';
   commentsList.hidden = entries.length === 0;
   commentsEmpty.hidden = entries.length > 0;
-  copyButton.disabled = suspended || entries.length === 0;
   const unsentCount = entries.filter((item) => deliveryState(item).kind === 'unsent').length;
   feedbackButton.disabled = suspended || entries.length === 0;
   feedbackButton.textContent = unsentCount > 0 ? `Copy feedback (${unsentCount})` : 'Copy feedback';
@@ -1570,31 +1553,6 @@ function deliveryBadge(annotation) {
   if (!Number.isNaN(date.getTime())) badge.title = date.toLocaleString();
   badge.textContent = ` \u00B7 ${state.kind === 'read' ? `Read by ${state.by}` : 'Sent'}`;
   return badge;
-}
-
-function copyPrompt() {
-  const comments = panelEntries().map((annotation) => ({
-    id: annotation.id,
-    scope: annotation.scope,
-    blockCount: annotation.block_count || 1,
-    blockKind: blockKind(annotation),
-    quote: annotation.quote,
-    detached: anchors.get(annotation.id)?.detached ?? false,
-    note: annotation.note,
-    author: annotation.author,
-    createdAt: annotation.created_at,
-    replies: annotation.replies,
-  }));
-  if (comments.length === 0 || !currentFile) return;
-  const text = buildPrompt({ documentPath, relativePath: currentFile, origin: location.origin, workspaceId, comments });
-  if (!navigator.clipboard?.writeText) {
-    setStatus('Could not copy prompt');
-    return;
-  }
-  navigator.clipboard.writeText(text).then(
-    () => setStatus('Prompt copied', 2000),
-    () => setStatus('Could not copy prompt'),
-  );
 }
 
 function headingBefore(node) {

@@ -52,4 +52,4 @@ curl -s -X POST "http://127.0.0.1:<port>/api/annotations/status?path=<relative-p
 EOF
 ```
 
-One viewer process serves many folders (workspaces). `ws` selects the workspace; copy it from the prompt or the page URL (`/w/<id>/`). Omitting `ws` means the viewer's default workspace, the folder it was first started on. `path` is relative to the selected workspace's root; a workspace opened on a single file (its `target` in `GET /api/workspaces`) answers 403 for any other path. Replies appear in the browser live. Do not use `PUT /api/annotations`; it replaces the user's whole list.
+One viewer process serves many folders (workspaces). `ws` selects the workspace; copy it from the page URL (`/w/<id>/`). Omitting `ws` means the viewer's default workspace, the folder it was first started on. `path` is relative to the selected workspace's root; a workspace opened on a single file (its `target` in `GET /api/workspaces`) answers 403 for any other path. Replies appear in the browser live. Do not use `PUT /api/annotations`; it replaces the user's whole list.

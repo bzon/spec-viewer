@@ -7,6 +7,8 @@ import { beginDocument, initAnnotations, layoutAnnotationMarkers, loadAnnotation
 
 let documentVersion = 0; // bumped on every swap of the rendered document
 
+const THEME_STORAGE_KEY = 'spec-viewer-theme';
+
 const state = { workspaceGone: false, pendingSection: null, workspaces: [], currentH1: '', currentFile: null, isDirectory: false, files: [], themes: [], searchIndex: null, searchOpen: false, selectedResult: 0 };
 
 const els = {
@@ -21,7 +23,6 @@ const els = {
   annotationStatus: document.getElementById('annotation-status'),
   commentsList: document.getElementById('comments-list'),
   commentsEmpty: document.getElementById('comments-empty'),
-  copyPrompt: document.getElementById('copy-prompt'),
   copyFeedback: document.getElementById('copy-feedback'),
 };
 
@@ -32,7 +33,6 @@ async function init() {
     status: els.annotationStatus,
     commentsList: els.commentsList,
     commentsEmpty: els.commentsEmpty,
-    copyButton: els.copyPrompt,
     feedbackButton: els.copyFeedback,
   });
   if (typeof ResizeObserver === 'function') {
@@ -47,7 +47,14 @@ async function init() {
 
   // Listeners go on before the first await so early interaction is not dropped. Their
   // handlers tolerate state that has not loaded yet (see applyTheme, hashchange, search).
-  els.themeSelect.addEventListener('change', (e) => applyTheme(e.target.value));
+  els.themeSelect.addEventListener('change', (e) => {
+    if (!applyTheme(e.target.value)) return;
+    saveTheme(e.target.value);
+  });
+  // Another tab picked a theme: follow it. applyTheme never writes storage, so no loop.
+  window.addEventListener('storage', (e) => {
+    if (e.key === THEME_STORAGE_KEY && e.newValue) applyTheme(e.newValue);
+  });
   window.addEventListener('hashchange', () => {
     const path = readHashPath();
     if (path && path !== state.currentFile) loadFile(path);
@@ -377,18 +384,56 @@ async function loadThemes() {
     opt.textContent = theme;
     els.themeSelect.appendChild(opt);
   });
-  const match = els.themeCss.getAttribute('href').match(/themes\/(.+)\.css/);
-  if (match) {
-    els.themeSelect.value = match[1];
-    setTheme(match[1]);
+  // index.html's inline script may already have pointed the link at the saved theme;
+  // the server's configured theme is kept in data-server-theme.
+  const serverTheme = themeFromHref(els.themeCss.dataset.serverTheme || els.themeCss.getAttribute('href'));
+  const saved = readSavedTheme();
+  if (saved && !state.themes.includes(saved)) forgetSavedTheme();
+  const active = saved && state.themes.includes(saved) ? saved : serverTheme;
+  els.themeCss.href = '/css/themes/' + active + '.css';
+  els.themeSelect.value = active;
+  setTheme(active);
+}
+
+function themeFromHref(href) {
+  const match = href && href.match(/themes\/(.+)\.css/);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+// localStorage can throw (blocked storage, some private modes); the theme still applies.
+function readSavedTheme() {
+  try {
+    return localStorage.getItem(THEME_STORAGE_KEY);
+  } catch {
+    return null;
   }
 }
 
+function saveTheme(themeName) {
+  try {
+    localStorage.setItem(THEME_STORAGE_KEY, themeName);
+  } catch {
+    /* not remembered */
+  }
+}
+
+function forgetSavedTheme() {
+  try {
+    localStorage.removeItem(THEME_STORAGE_KEY);
+  } catch {
+    /* nothing to forget */
+  }
+}
+
+// Returns true when the theme is known (and now active).
 function applyTheme(themeName) {
-  if (!state.themes.includes(themeName)) return; // theme list not loaded yet
+  if (!state.themes.includes(themeName)) return false; // theme list not loaded yet
+  els.themeSelect.value = themeName;
+  if (themeFromHref(els.themeCss.getAttribute('href')) === themeName) return true;
   els.themeCss.href = '/css/themes/' + themeName + '.css';
   setTheme(themeName);
   if (state.currentFile) reloadCurrentFile();
+  return true;
 }
 
 function initSearch() {
