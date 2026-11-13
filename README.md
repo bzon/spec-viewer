@@ -189,11 +189,11 @@ Flags:
 
 - Markdown rendering with [markdown-it](https://github.com/markdown-it/markdown-it)
 - Mermaid diagram rendering from `mermaid` code blocks; diagrams that are scaled down to fit can be shown at full size with the **Expand** button that appears on hover
-- Syntax highlighting for 25+ languages with [Shiki](https://shiki.style)
+- Syntax highlighting for 25+ languages with [Shiki](https://shiki.style); code blocks have a language header, line numbers, and Copy
 - "On this page" TOC with active section tracking
 - Live reload on file save
 - Tree-grouped file list for directories
-- Cmd+K search across headings, filenames, and content
+- Cmd+K search (or the Search button above the file list) across headings, filenames, and content
 - Persistent personal highlights, review comments with threads, block comments, and a copy-feedback action for agents
 - 5 built-in themes + custom theme support
 - Single instance reuse (no duplicate servers)

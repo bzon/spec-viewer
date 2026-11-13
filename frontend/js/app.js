@@ -437,29 +437,39 @@ function applyTheme(themeName) {
 }
 
 function initSearch() {
+  const searchButton = document.getElementById('search-button');
+  const platform = navigator.userAgentData?.platform || navigator.platform || '';
+  document.getElementById('search-shortcut').textContent = /mac|iphone|ipad/i.test(platform) ? '\u2318K' : 'Ctrl K';
+  searchButton.addEventListener('click', () => {
+    if (!state.searchOpen) openSearch(searchButton);
+  });
   document.addEventListener('keydown', (e) => {
     if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
       e.preventDefault();
       if (state.searchOpen) {
-        closeSearch();
+        closeSearch(true);
       } else {
         openSearch();
       }
     }
     if (e.key === 'Escape' && state.searchOpen) {
-      closeSearch();
+      closeSearch(true);
     }
   });
 }
 
-function openSearch() {
+// Where focus goes back to when the modal is dismissed without choosing a result.
+let searchOpener = null;
+
+function openSearch(opener = document.activeElement) {
+  searchOpener = opener;
   state.searchOpen = true;
   state.selectedResult = 0;
 
   const backdrop = document.createElement('div');
   backdrop.className = 'search-backdrop';
   backdrop.addEventListener('click', (e) => {
-    if (e.target === backdrop) closeSearch();
+    if (e.target === backdrop) closeSearch(true);
   });
 
   const modal = document.createElement('div');
@@ -509,10 +519,12 @@ function openSearch() {
   input.focus();
 }
 
-function closeSearch() {
+function closeSearch(restoreFocus = false) {
   const backdrop = document.querySelector('.search-backdrop');
   if (backdrop) backdrop.remove();
   state.searchOpen = false;
+  if (restoreFocus && searchOpener?.isConnected && searchOpener !== document.body) searchOpener.focus();
+  searchOpener = null;
 }
 
 function renderSearchResults(container, query) {
@@ -574,13 +586,60 @@ function updateSelectedResult(container) {
   });
 }
 
+// Display names for common fence languages; any other language is shown as written, lowercased.
+const LANGUAGE_NAMES = {
+  js: 'JavaScript', javascript: 'JavaScript', jsx: 'JSX', mjs: 'JavaScript',
+  ts: 'TypeScript', typescript: 'TypeScript', tsx: 'TSX',
+  py: 'Python', python: 'Python',
+  sh: 'Bash', bash: 'Bash', shell: 'Bash', zsh: 'Bash', console: 'Bash',
+  go: 'Go', golang: 'Go',
+  yml: 'YAML', yaml: 'YAML',
+  json: 'JSON', jsonc: 'JSON', toml: 'TOML',
+  md: 'Markdown', markdown: 'Markdown',
+  sql: 'SQL', html: 'HTML', css: 'CSS', xml: 'XML',
+  rs: 'Rust', rust: 'Rust', rb: 'Ruby', ruby: 'Ruby', php: 'PHP', java: 'Java',
+  kt: 'Kotlin', kotlin: 'Kotlin', swift: 'Swift', c: 'C', cpp: 'C++', 'c++': 'C++',
+  diff: 'Diff', dockerfile: 'Dockerfile', graphql: 'GraphQL', gql: 'GraphQL',
+  text: 'Text', txt: 'Text', plaintext: 'Text', plain: 'Text',
+};
+
+function languageLabel(pre) {
+  const language = (pre.dataset.language || '').trim().toLowerCase();
+  if (!language) return 'Text';
+  return LANGUAGE_NAMES[language] || language;
+}
+
+// Wraps each code block in a frame with a header (language label, Comment and Copy).
+// Line numbers are drawn by CSS on span.line (see base.css); here only the block is
+// told whether it has more than one line and how many digits the gutter needs.
 function addCopyButtons(container) {
   container.querySelectorAll('pre:not(.mermaid)').forEach((pre) => {
-    if (pre.querySelector('.copy-btn')) return;
+    if (pre.closest('.code-block-wrapper')) return;
     const wrapper = document.createElement('div');
     wrapper.className = 'code-block-wrapper';
     pre.parentNode.insertBefore(wrapper, pre);
-    wrapper.appendChild(pre);
+
+    const header = document.createElement('div');
+    header.className = 'code-header';
+    const label = document.createElement('span');
+    label.className = 'code-language';
+    label.textContent = languageLabel(pre);
+    const actions = document.createElement('div');
+    actions.className = 'code-actions';
+    header.append(label, actions);
+    wrapper.append(header, pre);
+
+    const lines = Array.from(pre.querySelectorAll('code > .line'));
+    const last = lines[lines.length - 1];
+    if (lines.length > 1 && last.textContent === '') {
+      last.classList.add('line-trailing'); // Shiki's empty line after a final newline: no number
+      lines.pop();
+    }
+    const lineCount = lines.length;
+    if (lineCount > 1) {
+      pre.classList.add('has-line-numbers');
+      pre.style.setProperty('--line-digits', String(String(lineCount).length));
+    }
 
     const btn = document.createElement('button');
     btn.type = 'button';
@@ -594,7 +653,7 @@ function addCopyButtons(container) {
         setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
       });
     });
-    wrapper.appendChild(btn);
+    actions.appendChild(btn);
   });
 }
 

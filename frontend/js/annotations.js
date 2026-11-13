@@ -11,8 +11,10 @@ const MARKER_CLEARANCE = 12;
 const TEXT_QUOTE_LIMIT = 3000;
 const DIAGRAM_OR_CODE = 'pre.mermaid, .code-block-wrapper';
 // Rendered output and UI that is not document text: never part of any quote or context.
-// Hover controls inside code blocks and diagrams; never part of a block's text.
-const BLOCK_CONTROLS = '.copy-btn, .annotation-block-add, .diagram-expand';
+// Controls inside code blocks and diagrams, and the code block header (language label and
+// the controls); never part of a block's text. Line numbers are CSS-generated, so they
+// are not text at all.
+const BLOCK_CONTROLS = '.copy-btn, .annotation-block-add, .diagram-expand, .code-header';
 const NON_TEXT = `svg, style, ${BLOCK_CONTROLS}, .annotation-block-marker`;
 
 const DELIVERY_FIELDS = ['sent_at', 'read_at', 'read_by'];
@@ -689,18 +691,19 @@ function layoutMarkers() {
   if (popover) placePopover();
 }
 
-// Quiet "Comment" button inside code blocks and diagrams, shown on hover/focus.
+// Quiet "Comment" button: in the header of code blocks (left of Copy), on hover/focus in diagrams.
 function ensureBlockCommentButtons() {
   for (const block of root.querySelectorAll(DIAGRAM_OR_CODE)) {
     const isCode = block.classList.contains('code-block-wrapper');
-    if (block.querySelector(':scope > .annotation-block-add')) continue;
+    if (block.querySelector('.annotation-block-add')) continue;
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'annotation-block-add';
     button.textContent = 'Comment';
     button.setAttribute('aria-label', isCode ? 'Comment on code block' : 'Comment on diagram');
     button.addEventListener('click', () => commentOnBlock(block));
-    block.appendChild(button);
+    if (isCode) block.querySelector(':scope > .code-header > .code-actions').prepend(button);
+    else block.appendChild(button);
   }
 }
 

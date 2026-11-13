@@ -20,6 +20,11 @@
 <body>
   <div id="app">
     <aside class="sidebar-left" id="file-list">
+      <button id="search-button" class="sidebar-search" type="button" aria-label="Search files" aria-keyshortcuts="Control+K Meta+K">
+        <svg class="sidebar-search-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false"><circle cx="6.5" cy="6.5" r="4.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10 10l4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        <span class="sidebar-search-text">Search</span>
+        <kbd id="search-shortcut">Ctrl K</kbd>
+      </button>
       <div class="sidebar-label">Files</div>
       <div id="files"></div>
     </aside>

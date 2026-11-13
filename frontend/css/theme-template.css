@@ -27,7 +27,7 @@
   --text-muted: #6e7681;
 
   /* ── Border ────────────────────────────────────────────────
-     Dividers, table borders, code block borders.            */
+     Dividers, table borders, code block header divider.            */
   --border: #30363d;
 
   /* ── Heading ───────────────────────────────────────────────
@@ -59,6 +59,13 @@
      Background for inline code, code blocks, blockquotes,
      and table headers.                                      */
   --code-bg: #161b22;
+
+  /* ── Code block border ─────────────────────────────────────
+     1px frame around code blocks, and the color of line
+     numbers inside them. Aim for at least 3:1 contrast against
+     both --bg and --code-bg. Optional: when omitted, the frame
+     uses --border and line numbers use --text-muted.        */
+  --code-border: #636e7b;
 
   /* ── Highlights ────────────────────────────────────────────
      Marker background and its readable foreground color.    */

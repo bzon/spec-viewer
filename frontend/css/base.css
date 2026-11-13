@@ -117,6 +117,48 @@ body {
   padding: 0 16px 8px;
 }
 
+/* Search trigger: looks like a quiet field; opens the same modal as Cmd/Ctrl+K. */
+.sidebar-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: calc(100% - 32px);
+  margin: 0 16px 16px;
+  padding: 6px 8px;
+  color: var(--text-muted);
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sidebar-search:hover {
+  color: var(--text);
+  border-color: var(--text-muted);
+}
+
+.sidebar-search:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.sidebar-search-icon {
+  flex: none;
+}
+
+.sidebar-search-text {
+  flex: 1;
+}
+
+.sidebar-search kbd {
+  font: inherit;
+  font-size: 10px;
+  opacity: 0.75;
+}
+
 /* ============================================================
    File Items (sidebar-left)
    ============================================================ */
@@ -251,50 +293,125 @@ body {
   margin-bottom: 0;
 }
 
+/* Code block: a framed card, header strip on top, code below. */
 .code-block-wrapper {
   position: relative;
   margin-bottom: 16px;
+  background-color: var(--code-bg);
+  border: 1px solid var(--code-border, var(--border));
+  border-radius: 6px;
 }
 
-.code-block-wrapper pre {
-  margin-bottom: 0;
+.code-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 28px;
+  padding: 0 6px 0 16px;
+  border-bottom: 1px solid var(--border);
+  border-radius: 5px 5px 0 0;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
-.copy-btn {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  padding: 3px 10px;
+.code-language {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
   font-size: 11px;
-  font-family: inherit;
-  color: var(--text-muted);
-  background: var(--bg);
-  border: 1px solid var(--border);
+  line-height: 1;
+  color: var(--text-secondary);
+}
+
+.code-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* Header controls: quiet text buttons, always visible (the header is their home). */
+.code-header .copy-btn,
+.code-header .annotation-block-add {
+  position: static;
+  min-width: 0;
+  padding: 3px 8px;
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.2;
+  color: var(--text-secondary);
+  background: none;
+  border: 1px solid transparent;
   border-radius: 4px;
   cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.15s ease;
-}
-
-.copy-btn:hover {
-  color: var(--text);
-  border-color: var(--text-muted);
-}
-
-.copy-btn:focus-visible {
   opacity: 1;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+/* "Copied!" replaces "Copy" without moving Comment. */
+.code-header .copy-btn {
+  min-width: 64px;
+  text-align: center;
+}
+
+.code-header .copy-btn:hover,
+.code-header .annotation-block-add:hover {
+  color: var(--text);
+  background-color: var(--hover-bg);
+  border-color: transparent;
+}
+
+.code-header .copy-btn:focus-visible,
+.code-header .annotation-block-add:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
 
+/* Shiki paints its own theme background on the pre; the block uses the viewer's. */
 #rendered pre {
-  background-color: var(--code-bg);
+  background-color: var(--code-bg) !important;
   border-radius: 6px;
   padding: 16px;
   overflow-x: auto;
   margin-bottom: 16px;
   font-size: 13px;
   line-height: 1.6;
+}
+
+#rendered .code-block-wrapper > pre {
+  margin-bottom: 0;
+  padding: 12px 16px;
+  border-radius: 0 0 5px 5px;
+}
+
+/* Line numbers: CSS counters on span.line, so they are not text (not selected, not copied,
+   not in textContent). The gutter is sticky so it stays put while long lines scroll. */
+#rendered .code-block-wrapper > pre.has-line-numbers {
+  padding-left: 0;
+  counter-reset: code-line;
+}
+
+pre.has-line-numbers code > .line {
+  counter-increment: code-line;
+}
+
+pre.has-line-numbers code > .line::before {
+  content: counter(code-line);
+  display: inline-block;
+  position: sticky;
+  left: 0;
+  box-sizing: content-box;
+  width: calc(var(--line-digits, 2) * 1ch);
+  padding: 0 16px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--code-border, var(--text-muted));
+  background-color: var(--code-bg);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Shiki's empty line after a final newline: no number, no blank row. */
+pre code > .line-trailing {
+  display: none;
 }
 
 #rendered pre.mermaid {
@@ -909,22 +1026,16 @@ body {
   transition: opacity 0.15s ease;
 }
 
-.code-block-wrapper > .annotation-block-add,
 .diagram-expand {
   right: 84px;
 }
 
-/* One rule for every block control (Copy, Comment, Expand): shown while the pointer is
-   over the block or focus is anywhere inside it, so tabbing between them never hides one. */
-.code-block-wrapper:hover > .copy-btn,
-.code-block-wrapper:hover > .annotation-block-add,
-.code-block-wrapper:focus-within > .copy-btn,
-.code-block-wrapper:focus-within > .annotation-block-add,
+/* Diagram controls (Comment, Expand): shown while the pointer is over the diagram or focus
+   is anywhere inside it, so tabbing between them never hides one. */
 #rendered pre.mermaid:hover > .annotation-block-add,
 #rendered pre.mermaid:hover > .diagram-expand,
 #rendered pre.mermaid:focus-within > .annotation-block-add,
 #rendered pre.mermaid:focus-within > .diagram-expand,
-.copy-btn:focus-visible,
 .annotation-block-add:focus-visible,
 .diagram-expand:focus-visible {
   opacity: 1;
@@ -933,8 +1044,7 @@ body {
 /* No hover (touch): the controls cannot be revealed, so keep them visible but quiet.
    Same positions as on hover, so they cover no more of the block. */
 @media (hover: none) {
-  .copy-btn,
-  .annotation-block-add,
+  #rendered pre.mermaid > .annotation-block-add,
   .diagram-expand {
     opacity: 0.7;
   }

@@ -21,19 +21,34 @@ const md = markdownit({
     if (lang?.toLowerCase() === 'mermaid') {
       return `<pre class="mermaid">${md.utils.escapeHtml(code)}</pre>`;
     }
-    if (!highlighter || !lang) return '';
-    try {
-      return highlighter
-        .codeToHtml(code, {
-          lang,
-          theme: themeMap[currentTheme] || 'github-dark',
-        })
-        .replace('<pre ', `<pre data-language="${md.utils.escapeHtml(lang)}" `);
-    } catch {
-      return '';
+    if (highlighter && lang) {
+      try {
+        return highlighter
+          .codeToHtml(code, {
+            lang,
+            theme: themeMap[currentTheme] || 'github-dark',
+          })
+          .replace('<pre ', `<pre data-language="${md.utils.escapeHtml(lang)}" `);
+      } catch {
+        // unknown language: plain lines below
+      }
     }
+    return plainCodeHtml(code, lang);
   },
 });
+
+// Code that Shiki did not highlight (not loaded yet, no language, unknown language),
+// in the same shape as Shiki's output: one span.line per line, the "\n" between them kept
+// as text, so line numbers (CSS, see base.css) and the code's textContent are the same
+// either way. A trailing newline ends the last line instead of starting another.
+function plainCodeHtml(code, lang) {
+  const lines = code.split('\n');
+  const endsWithNewline = lines.length > 1 && lines[lines.length - 1] === '';
+  if (endsWithNewline) lines.pop();
+  const body = lines.map((line) => `<span class="line">${md.utils.escapeHtml(line)}</span>`).join('\n');
+  const attribute = lang ? ` data-language="${md.utils.escapeHtml(lang)}"` : '';
+  return `<pre${attribute} tabindex="0"><code>${body}${endsWithNewline ? '\n' : ''}</code></pre>`;
+}
 
 const HEX_COLOR_RE = /^#(?:[0-9a-fA-F]{3}){1,2}$/;
 const HEX_COLOR_INLINE_RE = /#(?:[0-9a-fA-F]{3}){1,2}(?=[\s,;)\]}<]|$)/g;
